@@ -21,6 +21,7 @@
 // The folder case has to finish before the folder sync starts (App.tsx waits on it): the sync's first round would
 // otherwise remove the moved scenes' files from the project's folder before their own folders exist.
 
+import { defineMessages, t } from '../../core/i18n'
 import { hashContents } from '../../core/hash'
 import type { FolderWriteOp } from '../../core/project/folderSync'
 import { projectToFolderFiles } from '../../core/project/projectFolder'
@@ -31,16 +32,35 @@ import { clearParkedSplitOff, readParkedSplitOff, unparkSplitOff } from './proje
 import type { EditorStore } from '../store/store'
 import { FOLDER_OPTIONS } from './folderOptions'
 
+const M = defineMessages('projectSplitNotice', {
+  confirmAbout: '“{project}” holds {count} scenes. A project now holds one, so the others become projects of their own, each in a folder beside this one:',
+  confirmMake: 'Make these folders now? Cancel opens the project read-only and changes nothing; it asks again next time.',
+  readOnly: 'Opened read-only',
+  canceled: 'This project still holds {count} scenes in its folder. Nothing was changed; reopen it to split them into projects of their own.',
+  split: 'Split into projects',
+  splitBeside: 'Each of {names} is a project now, in a folder beside this one.',
+  unlisted: {
+    one: '{names} could not be added to your projects list: open it with Open Project Folder.',
+    other: '{names} could not be added to your projects list: open them with Open Project Folder.',
+  },
+  projects: 'Projects',
+  waiting: 'Some scenes are waiting',
+  waitDownload: 'This project held other scenes - {names}. This browser keeps one project, so they are kept for you to download as files of their own.',
+  download: 'Download them',
+  savedOther: 'This project held other scenes. Each of {names} is a project of its own now.',
+  splitFailed: "This project's other scenes ({names}) could not be made projects of their own: {error}. They are kept, and the app tries again next time.",
+})
+
 const names = (projects: readonly ProjectJSON[]): string => projects.map((p) => `“${p.name}”`).join(', ')
 
 /** The confirm text for the desktop's one question (exported for the gate that answers it). */
 export function folderSplitQuestion(project: string, parent: string, projects: readonly ProjectJSON[]): string {
   return [
-    `“${project}” holds ${projects.length + 1} scenes. A project now holds one, so the others become projects of their own, each in a folder beside this one:`,
+    t(M.confirmAbout, { project, count: projects.length + 1 }),
     '',
     ...projects.map((p) => `  ${parent}${p.name}`),
     '',
-    'Make these folders now? Cancel opens the project read-only and changes nothing; it asks again next time.',
+    t(M.confirmMake),
   ].join('\n')
 }
 
@@ -73,8 +93,8 @@ export async function fileSplitOff(store: EditorStore): Promise<void> {
       if (typeof confirm === 'function' && !confirm(folderSplitQuestion(store.getState().projectName, parent, parked))) {
         store.setReadOnly(true)
         store.showSaveNotice(
-          'Opened read-only',
-          `This project still holds ${parked.length + 1} scenes in its folder. Nothing was changed; reopen it to split them into projects of their own.`,
+          t(M.readOnly),
+          t(M.canceled, { count: parked.length + 1 }),
         )
         return
       }
@@ -112,18 +132,18 @@ export async function fileSplitOff(store: EditorStore): Promise<void> {
       await api.remember(docId, { baseline: null, signature: '' })
       clearParkedSplitOff()
       store.showSaveNotice(
-        'Split into projects',
-        `Each of ${names(parked)} is a project now, in a folder beside this one.` +
-          (unlisted.length > 0 ? ` ${names(unlisted)} could not be added to your projects list: open ${unlisted.length === 1 ? 'it' : 'them'} with Open Project Folder.` : ''),
-        { label: 'Projects', command: 'file.projects' },
+        t(M.split),
+        t(M.splitBeside, { names: names(parked) }) +
+          (unlisted.length > 0 ? ' ' + t(M.unlisted, { count: unlisted.length, names: names(unlisted) }) : ''),
+        { label: t(M.projects), command: 'file.projects' },
       )
       return
     }
     if (api === null && !supportsDocumentLibrary()) {
       store.showSaveNotice(
-        'Some scenes are waiting',
-        `This project held other scenes - ${names(parked)}. This browser keeps one project, so they are kept for you to download as files of their own.`,
-        { label: 'Download them', command: 'file.exportSplitOff' },
+        t(M.waiting),
+        t(M.waitDownload, { names: names(parked) }),
+        { label: t(M.download), command: 'file.exportSplitOff' },
       )
       return
     }
@@ -132,14 +152,14 @@ export async function fileSplitOff(store: EditorStore): Promise<void> {
       unparkSplitOff(1)
     }
     clearParkedSplitOff()
-    store.showSaveNotice('Split into projects', `This project held other scenes. Each of ${names(parked)} is a project of its own now.`, {
-      label: 'Projects',
+    store.showSaveNotice(t(M.split), t(M.savedOther, { names: names(parked) }), {
+      label: t(M.projects),
       command: 'file.projects',
     })
   } catch (e) {
     store.showSaveNotice(
-      'Some scenes are waiting',
-      `This project's other scenes (${names(readParkedSplitOff())}) could not be made projects of their own: ${e instanceof Error ? e.message : String(e)}. They are kept, and the app tries again next time.`,
+      t(M.waiting),
+      t(M.splitFailed, { names: names(readParkedSplitOff()), error: e instanceof Error ? e.message : String(e) }),
     )
   }
 }

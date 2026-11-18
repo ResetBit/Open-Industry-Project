@@ -10,6 +10,8 @@ import type { WiredBindings } from '../plc/link/plcLink'
 import type { PlcRun } from './plcGroup'
 import type { TagValue } from '../plc/types'
 
+import type { PartInterference } from './partInterference'
+
 export type MainToWorker =
   | { type: 'warmup' }
   // the page's hang beacon (core/parts/partScript.ts setPartCallBeacon): part code marks itself in it, so a page that
@@ -58,6 +60,7 @@ export type MainToWorker =
   | { type: 'step'; steps?: number; until?: number; seq?: number }
   // what the frame cannot carry about each cargo body: its velocity and what it touches. Answered with 'cargoDetail'.
   | { type: 'inspectCargo'; seq: number }
+  | { type: 'inspectPartInterference'; seq: number; first: string; second: string }
   | { type: 'setTimeScale'; scale: number }
   // the PLC→part half of the device-IO bus, injected from the main thread: tag values fed to custom-part
   // behaviors as the tags they read (ctx.readTag/readNumber). The local program's scans do not route
@@ -221,6 +224,7 @@ export type WorkerToMain =
   // `velocities` is m/s (x, y, z per row; a unit load's pieces share the load's body), and `touching` lists what
   // each body touches, by id (sim/cargoContacts.ts)
   | { type: 'cargoDetail'; seq: number; simTime: number; ids: Uint32Array; velocities: Float32Array; touching: [id: number, touching: string[]][] }
+  | { type: 'partInterference'; seq: number; simTime: number; result: PartInterference; jobRows?: Record<string, number> }
   | { type: 'error'; message: string }
   // a custom-part runtime diagnostic (core/parts/partDiagnostics) raised inside the worker; the sim's module
   // instance is separate from the main thread's, so events are mirrored across for the editor to surface

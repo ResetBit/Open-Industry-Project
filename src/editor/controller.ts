@@ -1,5 +1,7 @@
 import { Vector3 } from 'three'
 import type { BoxFrame } from '../core/frame'
+import { checkWiring } from '../plc/wiring'
+import { defineMessages, t } from '../core/i18n'
 import { subscribePartDiagnostics } from '../core/parts/partDiagnostics'
 import { getPackage, onPackagesChanged } from '../core/parts/partRegistry'
 import type { AuthorableShapeKind } from './rigTree'
@@ -56,6 +58,11 @@ import { LiveView } from './controller/liveView'
 import { selectionSet } from './store/selectionSet'
 
 /** {@link EditorController.plcAliases} with no program attached */
+const VISION = defineMessages('visionInput', {
+  currentRun: 'Start an editable local simulation with a virtual PLC, then acquire a new image.',
+  input: '{key} must be a distinct, writable BOOL or floating-point PLC input as indicated. A wired or forced input cannot receive the result.',
+})
+
 const NO_PLC_ALIASES: ReadonlyMap<string, string> = new Map()
 
 export type { PlcFaults, ProgramStatus }
@@ -787,6 +794,56 @@ export class EditorController {
 
   private get ownPlcWatch(): Readonly<Record<string, TagValue>> | null {
     return this.program.plcAttached ? (this.sim.plcState?.watch ?? this.program.seedWatch) : null
+  }
+
+  /** Identity of the current local vision run. An external or followed run cannot receive vision writes. */
+  get visionRunEpoch(): object | null {
+    const state = this.store.getState()
+    return state.running && !state.readOnly && !state.collab && this.lastFrame && this.program.plcAttached
+      && this.program.uaProgram
+      && !this.programOutOfDate && !linkOps.anyLinkOn(state.externalPlc)
+      ? this.program.uaProgram
+      : null
+  }
+
+  readVisionRequest(key: string, epoch: object): boolean | null {
+    if (this.visionRunEpoch !== epoch) return null
+    const program = this.program.runs.find((run) => run.controller === null)?.declared
+    const normalized = key.trim().toUpperCase()
+    const output = program?.outputs.find((name) => name.toUpperCase() === normalized)
+    if (output === undefined || program?.varInfo(output)?.type !== 'BOOL') return null
+    const canonical = program.aliases.get(output) ?? output
+    if (Object.keys(this.sim.forces).some((name) => {
+      return (program.aliases.get(name) ?? name).toUpperCase() === canonical.toUpperCase()
+    })) return null
+    const value = this.ownPlcWatch?.[canonical]
+    return typeof value === 'boolean' ? value : null
+  }
+
+  /** Validate a result as a whole so a PLC scan never sees a partially updated inspection. */
+  writeVisionInputs(values: readonly (readonly [string, number | boolean])[], epoch: object): string | null {
+    const program = this.program.runs.find((run) => run.controller === null)?.declared
+    if (!program || this.visionRunEpoch !== epoch) return t(VISION.currentRun)
+    const aliases = new Map([...program.aliases].map(([alias, name]) => [alias.toUpperCase(), name.toUpperCase()]))
+    const normalize = (name: string): string => aliases.get(name.toUpperCase()) ?? name.toUpperCase()
+    const inputs = new Map(program.inputs.map((name) => [normalize(name), program.aliases.get(name) ?? name]))
+    const feeds = new Set(checkWiring(this.store.getState().scene.parts).tags
+      .filter((tag) => tag.writers.length > 0).map((tag) => normalize(tag.name)))
+    const forces = new Set(Object.keys(this.sim.forces).map(normalize))
+    const written = new Map<string, TagValue>()
+    for (const [key, value] of values) {
+      const input = inputs.get(normalize(key.trim()))
+      const info = input && program.varInfo(input)
+      if (!input || !info || info.constant || info.location || feeds.has(normalize(input))
+        || forces.has(normalize(input)) || written.has(input)
+        || (typeof value === 'boolean' ? info.type !== 'BOOL'
+          : !Number.isFinite(value) || (info.type !== 'REAL' && info.type !== 'LREAL'))) {
+        return t(VISION.input, { key: key.trim() || '—' })
+      }
+      written.set(input, value)
+    }
+    this.sim.writePlcVars(Object.fromEntries(written))
+    return null
   }
 
   /** Per-part effective param values the running behaviors reported this frame (`ctx.report`), keyed by

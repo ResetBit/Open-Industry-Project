@@ -1,0 +1,79 @@
+.virtual-teach {
+  display: grid;
+  gap: 8px;
+  margin-block: 10px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+}
+
+.virtual-teach-header,
+.virtual-teach-nav,
+.virtual-teach-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.virtual-teach-header {
+  justify-content: space-between;
+}
+
+.virtual-teach-header h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.virtual-teach-nav [aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.virtual-teach-label,
+.virtual-teach-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.virtual-teach-field {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  margin: 0;
+  padding: 7px;
+}
+
+.virtual-teach-move {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 30px 30px;
+  align-items: center;
+  gap: 5px;
+}
+
+.virtual-teach-move span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.virtual-teach-readout {
+  display: grid;
+  gap: 3px;
+  padding: 7px;
+  border-radius: 4px;
+  background: var(--bg);
+  font-size: 12px;
+}
+
+.virtual-teach-readout output,
+.virtual-teach-move output {
+  font-variant-numeric: tabular-nums;
+}
+
+.virtual-teach-errors {
+  margin: 0;
+  padding-inline-start: 1.5em;
+  color: light-dark(#9a2b1e, #ffa399);
+}

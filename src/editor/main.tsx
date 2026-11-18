@@ -66,9 +66,23 @@ import { defaultCollabUrl, linkCollabServer } from '../collab/collabServer'
 import { initKeymapPrefs } from './keymapPrefs'
 import { initNavPrefs } from './navigationPrefs'
 import { initLanguage } from './autoTranslate'
+import { defineMessages, t } from '../core/i18n'
 import { followAppearance } from './appearance'
 import { isFreshNavigation, isPhoneViewport, phoneOpensDemo } from './demo/phoneDemo'
 import './styles.css'
+
+const M = defineMessages('startupNotice', {
+  readOnlyTitle: "Opened read-only",
+  splitFailed: "This project holds several scenes, and they could not be kept apart for filing: {reason}",
+  phoneDemoTitle: "Showing the example",
+  phoneDemoDetail: "Phones can view and run a line, not build one, so this opened on the built-in example. Your projects are in the Project menu.",
+  otherServerTitle: "This shared project is on another server",
+  otherServerDetail: "This shared project uses a different collaboration server at {host}. What you do in it goes there. If you did not expect that, close this tab.",
+  invalidShareTitle: "Share link not recognized",
+  invalidShareDetail: "This link does not name a shared project, so the editor opened on its own. Ask whoever sent it for a new link from Share.",
+  closedShareTitle: "That shared project was closed",
+  closedShareDetail: "Its owner stopped sharing it, so its links no longer open it. Ask them to share it again.",
+})
 
 // iOS reports "launched from the home screen" only through this non-standard flag - the
 // display-mode media query is the Android/Chrome route - and styles.css needs the signal in
@@ -120,7 +134,7 @@ initKeymapPrefs()
 // the camera's mouse style (middle orbits or pans), before the view reads it (editor/navigationPrefs.ts)
 initNavPrefs()
 // the browser's language, before anything renders a string (editor/autoTranslate.ts)
-initLanguage()
+await initLanguage()
 
 const store = new EditorStore()
 const sim = new SimClient()
@@ -145,7 +159,7 @@ function keepSplitOff(splitOff: readonly ProjectJSON[] | undefined): void {
   const parked = parkSplitOff(splitOff)
   if (parked.ok) return
   store.setReadOnly(true)
-  store.showSaveNotice('Opened read-only', `This project holds several scenes, and they could not be kept apart for filing: ${parked.message}`)
+  store.showSaveNotice(t(M.readOnlyTitle), t(M.splitFailed, { reason: parked.message }))
 }
 
 /** The solo (no-room) boot path: demo / autosave / default. The working copy has been read (projectFile.openWorkingCopy). */
@@ -193,7 +207,7 @@ function bootSolo(): void {
     // bank:false: this visit opens on the demo, so there is no scene of theirs on screen to bank.
     store.enterDemoSession(createPlcDemoScene(), DEMO_PROGRAM, { bank: false, controller: DEMO_CONTROLLER })
     // nobody asked for it, and a phone hides the Example badge that would say what this is
-    if (phoneDemo) store.showSaveNotice('Showing the example', 'Phones can view and run a line, not build one, so this opened on the built-in example. Your projects are in the Project menu.')
+    if (phoneDemo) store.showSaveNotice(t(M.phoneDemoTitle), t(M.phoneDemoDetail))
     return
   }
   // A stored project that could not be opened is published before anything below tries to save: those saves
@@ -379,8 +393,8 @@ async function bootRoom(resolved: ResolvedRoom, seedHere: SeedKind | null = null
   const otherServer = linkCollabServer()
   if (otherServer && otherServer !== defaultCollabUrl()) {
     store.showSaveNotice(
-      'This shared project is on another server',
-      `This shared project is kept on ${new URL(otherServer).host}, not on the Open Industry Project's server. What you do in it goes there. If you did not expect that, close this tab.`,
+      t(M.otherServerTitle),
+      t(M.otherServerDetail, { host: new URL(otherServer).host }),
     )
   }
   const { ydoc, provider, idb, whenSynced, serverSynced } = connectRoom(resolved)
@@ -761,8 +775,8 @@ if (room) {
     history.replaceState(history.state, '', url)
     startSolo()
     store.showSaveNotice(
-      'Share link not recognized',
-      'This link does not name a shared project, so the editor opened on its own. Ask whoever sent it for a new link from Share.',
+      t(M.invalidShareTitle),
+      t(M.invalidShareDetail),
     )
   }).catch((e: unknown) => console.error('[oip] opening the shared project failed', e))
 } else {
@@ -772,7 +786,7 @@ if (room) {
     const url = new URL(location.href)
     url.searchParams.delete('closed')
     history.replaceState(history.state, '', url.pathname + url.search + url.hash)
-    store.showSaveNotice('That shared project was closed', 'Its owner stopped sharing it, so its links no longer open it. Ask them to share it again.')
+    store.showSaveNotice(t(M.closedShareTitle), t(M.closedShareDetail))
   }
   // the desktop app booted to take a browser's project (Open in Desktop App; desktopHandoff.ts asks before importing)
   const handoff = DESKTOP_SHELL ? params.get('handoff') : null

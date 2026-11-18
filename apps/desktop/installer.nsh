@@ -11,7 +11,7 @@
 !define OIP_LINK_KEY "Software\Classes\openindustry"
 
 !macro customInstall
-  WriteRegStr SHELL_CONTEXT "${OIP_LINK_KEY}" "" "URL:Open Industry Project link"
+  WriteRegStr SHELL_CONTEXT "${OIP_LINK_KEY}" "" "URL:${PRODUCT_NAME} link"
   WriteRegStr SHELL_CONTEXT "${OIP_LINK_KEY}" "URL Protocol" ""
   WriteRegStr SHELL_CONTEXT "${OIP_LINK_KEY}\DefaultIcon" "" "$appExe,0"
   WriteRegStr SHELL_CONTEXT "${OIP_LINK_KEY}\shell\open\command" "" '"$appExe" "%1"'

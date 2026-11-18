@@ -86,7 +86,7 @@
     <link rel="preload" as="fetch" crossorigin href="/models/building/textures/BuildingPart_Wall_01_BaseColor.webp" />
     <link rel="preload" as="fetch" crossorigin href="/models/building/textures/BuildingPart_Wall_02_BaseColor.webp" />
 
-    <title>Open Industry Project</title>
+    <title>VirtualSimulation</title>
 
     <!--
       Boot skeleton: the app's silhouette, painted from static markup as soon as this document
@@ -437,7 +437,20 @@
          by its English text against the `dock.panel.*` messages (src/editor/dockLayout.ts). -->
     <script>
       try {
-        if (localStorage.getItem('oip-web/language') !== 'en') {
+        var preference = localStorage.getItem('oip-web/language') || (window.oipMenu ? 'zh-CN' : 'auto')
+        var browserLang = ((navigator.languages && navigator.languages[0]) || navigator.language || '').trim()
+        var locale = browserLang && new Intl.Locale(browserLang)
+        var automaticChinese = preference === 'auto' && locale && locale.language === 'zh' && (locale.script || locale.maximize().script) === 'Hans'
+        if (preference === 'zh-CN' || automaticChinese) {
+          document.documentElement.lang = 'zh-CN'
+          var chineseLabels = { Scene: '场景', History: '历史记录', Inspector: '属性检查器', Parts: '部件', Problems: '问题', Watch: '监视' }
+          var bootTabs = document.querySelectorAll('#boot-skeleton .bs-tab')
+          for (var index = 0; index < bootTabs.length; index++) {
+            var text = bootTabs[index].textContent
+            if (chineseLabels[text]) bootTabs[index].textContent = chineseLabels[text]
+          }
+          document.querySelector('#boot-skeleton .bs-viewport div').textContent = '正在加载…'
+        } else if (preference !== 'en') {
           var cache = JSON.parse(localStorage.getItem('oip-web/translations') || 'null')
           var lang = ((navigator.languages && navigator.languages[0]) || navigator.language || '').trim()
           if (cache && cache.lang === lang && cache.entries) {

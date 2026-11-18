@@ -2,17 +2,33 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
+import { setLocale } from '../core/i18n'
 import { setKeymapOverrides } from '../core/keymap'
 import { DEFAULT_NAV, setActiveNav } from '../core/navigation'
 import { acceleratorHint, keyHint, primaryKey, withKey, withKeys } from './keyHint'
+import { simplifiedChinese } from './locales/zh-CN'
 
-afterEach(() => setKeymapOverrides(null))
+afterEach(() => {
+  setKeymapOverrides(null)
+  setLocale('en', null)
+})
 
 describe('keyHint', () => {
   it('names every binding, primary first - not whichever one a string happened to hard-code', () => {
     expect(keyHint('pilot.exit', false)).toBe('Esc or P')
     expect(keyHint('view.projection', false)).toBe('O or Numpad 5')
     expect(keyHint('file.save', false)).toBe('Ctrl+S')
+  })
+
+  it('switches shortcut display and navigation gestures with the locale', () => {
+    setLocale('zh-CN', new Map(Object.entries(simplifiedChinese)))
+    expect(keyHint('view.projection', false)).toBe('O 或 小键盘 5')
+    expect(primaryKey('sim.playPause', false)).toBe('空格')
+    expect(withKeys('{nav:pan}', false)).toBe('鼠标中键')
+    setLocale('en', null)
+    expect(keyHint('view.projection', false)).toBe('O or Numpad 5')
+    expect(primaryKey('sim.playPause', false)).toBe('Space')
+    expect(withKeys('{nav:pan}', false)).toBe('the middle mouse button')
   })
 
   it('keeps a Cmd-only chord off Windows/Linux and shows only it on a Mac', () => {

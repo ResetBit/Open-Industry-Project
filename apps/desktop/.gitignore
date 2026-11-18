@@ -7,3 +7,6 @@ release/
 THIRD_PARTY_LICENSES.desktop.txt
 # fetched by scripts/fetch-libplctag.mjs (the postinstall)
 vendor/
+
+# generated for a specific license service
+license-config.json

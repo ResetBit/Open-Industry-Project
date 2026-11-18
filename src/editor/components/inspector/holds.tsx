@@ -6,6 +6,7 @@ import { emptyHolds, fillHolds, holdCount, holdsOf } from '../../../core/heldSto
 import { getPackage } from '../../../core/parts/partRegistry'
 import type { SceneJSON, SdkPart } from '../../../core/types'
 import type { EditorStore } from '../../store/store'
+import { localizePackageName } from '../../parts/partMetadata'
 import { defineMessages, t } from '../../../core/i18n'
 
 const M = defineMessages('inspector.holds', {
@@ -13,20 +14,23 @@ const M = defineMessages('inspector.holds', {
   count: 'Stock: {filled} of {positions}',
   fillTip: 'Place a {cargo} in every empty position. They are real parts, parented to this one: what a run starts with',
   fill: 'Fill',
+  fillPart: 'Fill {part}',
   emptyTip: 'Remove the {cargo}s this part holds',
   empty: 'Empty',
+  emptyPart: 'Empty {part}',
 })
 
 export function HoldsSection({ store, part, scene, running }: { store: EditorStore; part: SdkPart; scene: SceneJSON; running: boolean }) {
   const h = holdsOf(part)
   const count = h ? holdCount(scene, part) : null
   if (!h || !count) return null
-  const cargo = getPackage(h.holds.part)?.name ?? h.holds.part
-  const label = h.pkg.name
+  const cargoPkg = getPackage(h.holds.part)
+  const cargo = cargoPkg ? localizePackageName(cargoPkg) : h.holds.part
+  const label = localizePackageName(h.pkg)
   // built on the store's current scene, like the Inspector's own update: never a rendered snapshot
   const apply = (verb: string, edit: (s: SceneJSON, id: string) => SceneJSON | null): void => {
     const next = edit(store.getState().scene, part.id)
-    if (next) store.commit(`${verb} ${label}`, next)
+    if (next) store.commit(t(verb, { part: label }), next)
   }
   return (
     <div className="inspector-holds">
@@ -39,7 +43,7 @@ export function HoldsSection({ store, part, scene, running }: { store: EditorSto
           className="array-add"
           disabled={running || count.filled >= count.positions}
           title={t(M.fillTip, { cargo })}
-          onClick={() => apply('Fill', fillHolds)}
+          onClick={() => apply(M.fillPart, fillHolds)}
         >
           {t(M.fill)}
         </button>
@@ -48,7 +52,7 @@ export function HoldsSection({ store, part, scene, running }: { store: EditorSto
           className="array-add"
           disabled={running || count.filled === 0}
           title={t(M.emptyTip, { cargo })}
-          onClick={() => apply('Empty', emptyHolds)}
+          onClick={() => apply(M.emptyPart, emptyHolds)}
         >
           {t(M.empty)}
         </button>

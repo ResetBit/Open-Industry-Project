@@ -122,14 +122,14 @@ jobs:
         # install script adds an AppArmor profile that allows it. Installed with apt, as a user would.
         run: |
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=1
-          sudo apt-get install -y -qq "$(ls "$OIP_RELEASE_DIR"/open-industry-project_*_amd64.deb)"
-          xvfb-run -a node scripts/desktop-smoke.mjs /opt/Open\ Industry\ Project/open-industry-project --software-gl --out "$RUNNER_TEMP/smoke-deb"
+          sudo apt-get install -y -qq "$(ls "$OIP_RELEASE_DIR"/VirtualSimulation_*_amd64.deb)"
+          xvfb-run -a node scripts/desktop-smoke.mjs /opt/VirtualSimulation/open-industry-project --software-gl --out "$RUNNER_TEMP/smoke-deb"
 
       - name: AppImage under Ubuntu 24.04 rules (informational)
         # Expected to FAIL: an AppImage cannot carry an AppArmor profile, so on Ubuntu 24.04+ its sandbox is refused.
         # Kept so the day that changes (or stops being true) is visible. Ubuntu users are pointed at the .deb.
         continue-on-error: true
-        run: xvfb-run -a node scripts/desktop-smoke.mjs "$(ls "$OIP_RELEASE_DIR"/Open-Industry-Project-*.AppImage)" --software-gl --out "$RUNNER_TEMP/smoke-appimage-ubuntu" --timeout 90
+        run: xvfb-run -a node scripts/desktop-smoke.mjs "$(ls "$OIP_RELEASE_DIR"/VirtualSimulation-*.AppImage)" --software-gl --out "$RUNNER_TEMP/smoke-appimage-ubuntu" --timeout 90
 
       - name: Keep the packages
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -226,15 +226,15 @@ jobs:
           OIP_SMCTL: ${{ steps.keylocker.outputs.smctl }}
         run: node scripts/desktop-release.mjs
       - name: Launch the app
-        run: node scripts/desktop-smoke.mjs "$OIP_RELEASE_DIR/win-unpacked/Open Industry Project.exe" --software-gl --out "$RUNNER_TEMP/smoke-win"
+        run: node scripts/desktop-smoke.mjs "$OIP_RELEASE_DIR/win-unpacked/VirtualSimulation.exe" --software-gl --out "$RUNNER_TEMP/smoke-win"
 
       - name: Keep the installer
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: desktop-windows
           path: |
-            ${{ runner.temp }}/release/Open-Industry-Project-Setup-*.exe
-            ${{ runner.temp }}/release/Open-Industry-Project-Setup-*.exe.blockmap
+            ${{ runner.temp }}/release/VirtualSimulation-Setup-*.exe
+            ${{ runner.temp }}/release/VirtualSimulation-Setup-*.exe.blockmap
             ${{ runner.temp }}/release/latest.yml
           retention-days: 14
           if-no-files-found: error

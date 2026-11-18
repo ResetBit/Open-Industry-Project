@@ -3,6 +3,7 @@
 // output-ownership mirror are this area's own state (ProgramState, held by the controller); the store, the sim
 // and the link-side hooks come in as narrow dependencies (ProgramDeps).
 
+import { defineMessages, t } from '../../core/i18n'
 import { controllerOf, controllerTag, partsForController } from '../../core/io/controllerTag'
 import { lazyTable } from '../../core/watchTable'
 import type { SceneJSON } from '../../core/types'
@@ -16,6 +17,15 @@ import { attachedProgram, programRefusal } from '../program/programReload'
 import type { AttachedProgram } from '../program/programReload'
 import type { PublishedProgram } from '../links/opcUaServer'
 import type { EditorController } from '../controller'
+
+const M = defineMessages('plcForceNotice', {
+  others: '{shown} and {more} more',
+  title: 'Forces released',
+  released: {
+    one: 'Released {names}: the program no longer has that variable with the same type.',
+    other: 'Released {names}: the program no longer has those variables with the same type.',
+  },
+})
 
 /** Snapshot of the attached ST program's bind/compile result, mirrored into the ST editor
  *  panel for display. `attached` is true while a program is driving the running sim. */
@@ -418,13 +428,13 @@ function writeOrHold({ ec, p }: PlcWriteDeps, key: string, value: number | boole
 /** Variable names for a notice: the first few, then how many more. */
 function nameList(names: readonly string[]): string {
   const shown = names.slice(0, 4).join(', ')
-  return names.length > 4 ? `${shown} and ${names.length - 4} more` : shown
+  return names.length > 4 ? t(M.others, { shown, more: names.length - 4 }) : shown
 }
 
 /** Tell the user which forces an attach released because its program no longer has that variable (or not as that type). */
 export function announceDroppedForces(store: Pick<ProgramDeps['store'], 'showSaveNotice'>, dropped: readonly string[]): void {
   if (dropped.length === 0) return
-  store.showSaveNotice('Forces released', `Released ${nameList(dropped)}: the program no longer has ${dropped.length === 1 ? 'that variable' : 'those variables'} with the same type.`)
+  store.showSaveNotice(t(M.title), t(M.released, { count: dropped.length, names: nameList(dropped) }))
 }
 
 /** `forces` without the ones `watch` (a program's variable image) has no value of the same kind for; the same object

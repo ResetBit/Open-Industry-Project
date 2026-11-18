@@ -37,7 +37,7 @@
 //   â€¢ only parts whose package is loaded: `unresolvedPackages` carries the others out so the caller can say so.
 
 import { badControllerPrefix, controllerOf, controllerTag, splitControllerTag } from '../core/io/controllerTag'
-import { canonicalAddress, looksLikeAddress, parseDirectAddress, sizeWord } from '../core/io/iecAddress'
+import { canonicalAddress, looksLikeAddress, parseDirectAddress } from '../core/io/iecAddress'
 import type { IoSize } from '../core/io/iecAddress'
 import { labelHead, packageParamSpecs } from '../core/packageParams'
 import { commsOn } from '../core/conveyor/conveyorDirection'
@@ -45,6 +45,44 @@ import { getPackage } from '../core/parts/partRegistry'
 import type { TaggedPart } from './bindings'
 import type { PlcLink, WiredBindings } from './link/plcLink'
 import { valueKinds } from './link/plcLink'
+import { defineMessages, t } from '../core/i18n'
+
+const M = defineMessages('wiring', {
+  name: "{part} ({param})",
+  why: "{part}: {why}",
+  memoryAddress: "{address} is a memory address, and only inputs (%I) and outputs (%Q) are carried between the scene and the PLC",
+  longAddress: "{address} is a 64-bit address, and 64-bit values are not supported",
+  needsInput: "this part publishes the value, so it is the PLC's input: an %I address ({suggested}), not {address}",
+  needsOutput: "this part is driven by the value, so it is the PLC's output: a %Q address ({suggested}), not {address}",
+  sizeMismatch: "the value is {type}, which does not travel in the {size} address {address} ({suggestion})",
+  suggestBit: "a bit, like %IX0.0",
+  suggestDoubleWord: "a double word, like %ID0",
+  suggestNumeric: "a byte, word or double word, like %IW0",
+  sizeX: "bit",
+  sizeB: "byte",
+  sizeW: "word",
+  sizeD: "double-word",
+  listSeparator: ", ",
+  typeSeparator: " and ",
+  resultSeparator: "; ",
+  setpointValue: "{part} uses 0 in place of its {param}",
+  zero: "it stays at its zero value{setpoints}",
+  partZero: "for {parts} it stays at its zero value{setpoints}",
+  setpointResults: ", so {results}",
+  runsOnOwn: { one: "{parts} ignores it and runs on its own setting", other: "{parts} ignore it and run on their own setting" },
+  undeclaredDirection: "{part}.{param}: its part ({packageId}) does not say whether it reads or writes this tag, so its wiring is not checked. Give the param a dir and stType",
+  badController: "{name} before the :: is not a controller name (a letter or underscore, then letters, digits and underscores)",
+  typeClash: "declared as {types} by different parts ({parts})",
+  stProgram: "the ST program",
+  contested: "driven by {count} writers ({writers}) - last one wins, and which that is depends on part order",
+  numeric: "numeric",
+  programType: "parts declare it {partType}, the program declares it {programType}",
+  partsOnly: " (a part's write reaches only the program, never another part)",
+  undriven: "read by {readers} but the program does not drive it - {cost}{partsOnly}",
+  unread: "written by {writers} but the program does not read it{partsOnly}",
+  overlap: "is half of {doubleWord} (the two words {low} and {high}), so on a real PLC and over the external link the two overwrite each other. Give one of them an address of its own",
+  controllerCase: "names the controller {name} spelled another way. Names ignore case, but tags must be spelled alike to meet, so write {name}",
+})
 
 /** A scene part as the wiring walk needs it - {@link TaggedPart} plus its display name. */
 export interface WiringPart extends TaggedPart {
@@ -100,7 +138,11 @@ interface Decl {
 
 /** A tag param as the problem text names it: the part, then the param as its Inspector row reads ("Belt1 (Run tag)"). */
 function named(d: Pick<Decl, 'partLabel' | 'paramLabel'>): string {
-  return `${d.partLabel} (${d.paramLabel})`
+  return t(M.name, { part: d.partLabel, param: d.paramLabel })
+}
+
+function joinNames(names: readonly string[]): string {
+  return names.join(t(M.listSeparator))
 }
 
 function paramsOf(p: WiringPart): Record<string, unknown> {
@@ -117,12 +159,13 @@ const SIZES_FOR: Record<'BOOL' | 'INT' | 'DINT' | 'REAL', readonly IoSize[]> = {
 export function addressProblem(raw: string, dir: 'in' | 'out', stType: Decl['stType']): string | null {
   const a = parseDirectAddress(raw)
   if ('error' in a) return a.error
-  if (a.area === 'M') return `${a.text} is a memory address, and only inputs (%I) and outputs (%Q) are carried between the scene and the PLC`
-  if (a.size === 'L') return `${a.text} is a 64-bit address, and 64-bit values are not supported`
-  if (dir === 'out' && a.area !== 'I') return `this part publishes the value, so it is the PLC's input: an %I address (${a.text.replace(/^%Q/, '%I')}), not ${a.text}`
-  if (dir === 'in' && a.area !== 'Q') return `this part is driven by the value, so it is the PLC's output: a %Q address (${a.text.replace(/^%I/, '%Q')}), not ${a.text}`
+  if (a.area === 'M') return t(M.memoryAddress, { address: a.text })
+  if (a.size === 'L') return t(M.longAddress, { address: a.text })
+  if (dir === 'out' && a.area !== 'I') return t(M.needsInput, { address: a.text, suggested: a.text.replace(/^%Q/, '%I') })
+  if (dir === 'in' && a.area !== 'Q') return t(M.needsOutput, { address: a.text, suggested: a.text.replace(/^%I/, '%Q') })
   if (stType && !SIZES_FOR[stType].includes(a.size)) {
-    return `the value is ${stType}, which does not travel in the ${sizeWord(a.size)} address ${a.text} (${stType === 'BOOL' ? 'a bit, like %IX0.0' : stType === 'REAL' || stType === 'DINT' ? 'a double word, like %ID0' : 'a byte, word or double word, like %IW0'})`
+    const suggestion = stType === 'BOOL' ? M.suggestBit : stType === 'REAL' || stType === 'DINT' ? M.suggestDoubleWord : M.suggestNumeric
+    return t(M.sizeMismatch, { type: stType, size: t(M[`size${a.size}`]), address: a.text, suggestion: t(suggestion) })
   }
   return null
 }
@@ -138,12 +181,12 @@ function undrivenCost(readers: readonly Decl[]): string {
   const out: string[] = []
   if (zero.length > 0) {
     const hit = zero.filter((r) => r.replaces !== undefined)
-    const setpoints = hit.length > 0 ? `, so ${hit.map((r) => `${r.partLabel} uses 0 in place of its ${r.replaces}`).join(', ')}` : ''
-    out.push(`${own.length > 0 ? `for ${zero.map(named).join(', ')} ` : ''}it stays at its zero value${setpoints}`)
+    const setpoints = hit.length > 0 ? t(M.setpointResults, { results: joinNames(hit.map((r) => t(M.setpointValue, { part: r.partLabel, param: r.replaces! }))) }) : ''
+    out.push(own.length > 0 ? t(M.partZero, { parts: joinNames(zero.map(named)), setpoints }) : t(M.zero, { setpoints }))
   }
   const names = [...new Set(own.map((r) => r.partLabel))]
-  if (names.length > 0) out.push(`${names.join(', ')} ${names.length === 1 ? 'ignores it and runs on its' : 'ignore it and run on their'} own setting`)
-  return out.join('; ')
+  if (names.length > 0) out.push(t(M.runsOnOwn, { parts: joinNames(names), count: names.length }))
+  return out.join(t(M.resultSeparator))
 }
 
 /**
@@ -178,22 +221,22 @@ export function checkWiring(parts: readonly WiringPart[], link?: Pick<PlcLink, '
           severity: 'warning',
           kind: 'undeclared',
           tag,
-          message: `${p.name ?? p.id}.${spec.key}: its part (${p.packageId}) does not say whether it reads or writes this tag, so its wiring is not checked. Give the param a dir and stType`,
+          message: t(M.undeclaredDirection, { part: p.name ?? p.id, param: spec.key, packageId: String(p.packageId) }),
           parts: [p.id],
         })
         continue
       }
       const bad = badControllerPrefix(tag)
       if (bad !== null) {
-        const why = `${bad} before the :: is not a controller name (a letter or underscore, then letters, digits and underscores)`
-        problems.push({ severity: 'error', kind: 'controller', tag, message: `${named({ partLabel: p.name ?? p.id, paramLabel: labelHead(spec.label) })}: ${why}`, parts: [p.id] })
+        const why = t(M.badController, { name: bad })
+        problems.push({ severity: 'error', kind: 'controller', tag, message: t(M.why, { part: named({ partLabel: p.name ?? p.id, paramLabel: labelHead(spec.label) }), why }), parts: [p.id] })
         continue
       }
       const { controller, local } = splitControllerTag(tag)
       if (looksLikeAddress(local)) {
         const why = addressProblem(local, spec.dir, spec.stType)
         if (why) {
-          problems.push({ severity: 'error', kind: 'address', tag, message: `${named({ partLabel: p.name ?? p.id, paramLabel: labelHead(spec.label) })}: ${why}`, parts: [p.id] })
+          problems.push({ severity: 'error', kind: 'address', tag, message: t(M.why, { part: named({ partLabel: p.name ?? p.id, paramLabel: labelHead(spec.label) }), why }), parts: [p.id] })
           continue
         }
         tag = controllerTag(controller, canonicalAddress(local) ?? local)
@@ -229,7 +272,7 @@ export function checkWiring(parts: readonly WiringPart[], link?: Pick<PlcLink, '
         severity: 'error',
         kind: 'type-clash',
         tag,
-        message: `declared as ${declaredTypes.join(' and ')} by different parts (${decls.map(named).join(', ')})`,
+        message: t(M.typeClash, { types: declaredTypes.join(t(M.typeSeparator)), parts: joinNames(decls.map(named)) }),
         parts: [...new Set(decls.map((d) => d.partId))],
       })
     }
@@ -237,12 +280,12 @@ export function checkWiring(parts: readonly WiringPart[], link?: Pick<PlcLink, '
     // two things driving one tag: last writer wins, and which one that is depends on part order
     const driverCount = writers.length + (programWrites ? 1 : 0)
     if (driverCount > 1) {
-      const who = [...writers.map(named), ...(programWrites ? ['the ST program'] : [])]
+      const who = [...writers.map(named), ...(programWrites ? [t(M.stProgram)] : [])]
       problems.push({
         severity: 'error',
         kind: 'contested',
         tag,
-        message: `driven by ${driverCount} writers (${who.join(', ')}) - last one wins, and which that is depends on part order`,
+        message: t(M.contested, { count: driverCount, writers: joinNames(who) }),
         parts: writers.map((w) => w.partId),
       })
     }
@@ -258,20 +301,20 @@ export function checkWiring(parts: readonly WiringPart[], link?: Pick<PlcLink, '
           severity: 'error',
           kind: 'program-type',
           tag,
-          message: `parts declare it ${type}, the program declares it ${programIsBool ? 'BOOL' : 'numeric'}`,
+          message: t(M.programType, { partType: type, programType: programIsBool ? 'BOOL' : t(M.numeric) }),
           parts: [...new Set(decls.map((d) => d.partId))],
         })
       }
     }
 
     // a part writing the tag does not count: what a part writes reaches only the program, never another part
-    const partsOnly = writers.length > 0 && readers.length > 0 ? ` (a part's write reaches only the program, never another part)` : ''
+    const partsOnly = writers.length > 0 && readers.length > 0 ? t(M.partsOnly) : ''
     if (ours && readers.length > 0 && !programWrites) {
       problems.push({
         severity: 'warning',
         kind: 'undriven',
         tag,
-        message: `read by ${readers.map(named).join(', ')} but the program does not drive it - ${undrivenCost(readers)}${partsOnly}`,
+        message: t(M.undriven, { readers: joinNames(readers.map(named)), cost: undrivenCost(readers), partsOnly }),
         parts: readers.map((r) => r.partId),
       })
     }
@@ -280,7 +323,7 @@ export function checkWiring(parts: readonly WiringPart[], link?: Pick<PlcLink, '
         severity: 'warning',
         kind: 'unread',
         tag,
-        message: `written by ${writers.map(named).join(', ')} but the program does not read it${partsOnly}`,
+        message: t(M.unread, { writers: joinNames(writers.map(named)), partsOnly }),
         parts: writers.map((w) => w.partId),
       })
     }
@@ -318,7 +361,7 @@ export function checkWiring(parts: readonly WiringPart[], link?: Pick<PlcLink, '
         severity: 'error',
         kind: 'overlap',
         tag: word,
-        message: `is half of ${dword} (the two words %${area}W${first} and %${area}W${first + 1}), so on a real PLC and over the external link the two overwrite each other. Give one of them an address of its own`,
+        message: t(M.overlap, { doubleWord: dword, low: `%${area}W${first}`, high: `%${area}W${first + 1}` }),
         parts: [...new Set([...(byTag.get(word) ?? []), ...(byTag.get(dword) ?? [])].map((d) => d.partId))],
       })
     }
@@ -341,7 +384,7 @@ export function checkWiring(parts: readonly WiringPart[], link?: Pick<PlcLink, '
         severity: 'error',
         kind: 'controller',
         tag: other,
-        message: `names the controller ${first!} spelled another way. Names ignore case, but tags must be spelled alike to meet, so write ${first!}`,
+        message: t(M.controllerCase, { name: first! }),
         parts: [...new Set(bySpelling.get(other))],
       })
     }

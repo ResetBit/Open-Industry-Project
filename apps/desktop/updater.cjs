@@ -20,22 +20,22 @@ const UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000
  * Wire the updater. `getWindow()` is the app window dialogs belong to (or null). Returns
  * { checkInteractive(win) } for the menu item; a no-op object when not packaged.
  */
-function setupUpdater({ app, dialog, getWindow, notifyReady }) {
+function setupUpdater({ managedRelease = false, app, dialog, getWindow, notifyReady, text = (english) => english }) {
   const say = (win, opts) => {
     const parent = win && !win.isDestroyed() ? win : getWindow()
     return parent ? dialog.showMessageBox(parent, opts) : dialog.showMessageBox(opts)
   }
-  if (!app.isPackaged) {
+  if (!app.isPackaged || managedRelease) {
     return {
       readyVersion: () => null,
       install: () => {},
       checkInteractive: (win) =>
         say(win, {
           type: 'info',
-          title: 'Check for Updates',
-          message: 'Updates are checked only in an installed app.',
-          detail: 'This is the development shell; it runs whatever the repo holds.',
-          buttons: ['OK'],
+          title: text('Check for Updates', '检查更新'),
+          message: managedRelease ? text('Updates are distributed by the administrator.', '此版本由管理员统一分发更新。') : text('Updates are checked only in an installed app.', '更新检查适用于已安装的应用。'),
+          detail: managedRelease ? '' : text('This is the development shell; it runs whatever the repo holds.', '当前运行的是开发环境中的源码。'),
+          buttons: [text('OK', '确定')],
         }),
     }
   }
@@ -69,15 +69,15 @@ function setupUpdater({ app, dialog, getWindow, notifyReady }) {
         const result = await autoUpdater.checkForUpdates()
         const latest = result?.updateInfo?.version
         if (!result || !result.isUpdateAvailable) {
-          await say(win, { type: 'info', title: 'Check for Updates', message: "You're up to date.", detail: `Version ${app.getVersion()} is the latest.`, buttons: ['OK'] })
+          await say(win, { type: 'info', title: text('Check for Updates', '检查更新'), message: text("You're up to date.", "当前已是最新版本。"), detail: text(`Version ${app.getVersion()} is the latest.`, `${app.getVersion()} 是最新版本。`), buttons: [text('OK', '确定')] })
         } else if (prompted === latest) {
           // already downloaded and put off with Later: offer the restart again, since that is what was asked for
           const { response } = await say(win, {
             type: 'info',
-            title: 'Update Ready',
-            message: `Version ${latest} of Open Industry Project is ready.`,
-            detail: 'Restart now to update, or it installs the next time you quit the app.',
-            buttons: ['Restart Now', 'Later'],
+            title: text('Update Ready', '更新已就绪'),
+            message: text(`Version ${latest} of ${app.name} is ready.`, `${app.name} ${latest} 已准备好安装。`),
+            detail: text('Restart now to update, or it installs the next time you quit the app.', '立即重启以安装更新，或在下次退出应用时安装。'),
+            buttons: [text('Restart Now', '立即重启'), text('Later', '稍后')],
             defaultId: 0,
             cancelId: 1,
             noLink: true,
@@ -86,14 +86,14 @@ function setupUpdater({ app, dialog, getWindow, notifyReady }) {
         } else {
           await say(win, {
             type: 'info',
-            title: 'Check for Updates',
-            message: `Version ${latest} is available.`,
-            detail: "It is downloading now; a notice in the app offers the restart when it's ready.",
-            buttons: ['OK'],
+            title: text('Check for Updates', '检查更新'),
+            message: text(`Version ${latest} is available.`, `版本 ${latest} 已发布。`),
+            detail: text("It is downloading now; a notice in the app offers the restart when it's ready.", "正在下载。下载完成后，应用会提示重启。"),
+            buttons: [text('OK', '确定')],
           })
         }
       } catch (e) {
-        await say(win, { type: 'error', title: 'Check for Updates', message: 'Could not check for updates.', detail: String(e?.message ?? e), buttons: ['OK'] })
+        await say(win, { type: 'error', title: text('Check for Updates', '检查更新'), message: text('Could not check for updates.', '无法检查更新。'), detail: String(e?.message ?? e), buttons: [text('OK', '确定')] })
       }
     },
   }

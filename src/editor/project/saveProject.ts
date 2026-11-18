@@ -17,13 +17,23 @@ import { saveProjectNow, showSaveNoticeOnce } from '../desktop/desktopProjectBri
 import { syncedFolderPath, supportsFolderSync } from './projectFolderSync'
 import type { SceneSwapGuard } from './projectFolderLink'
 import type { EditorStore } from '../store/store'
+import { defineMessages, t } from '../../core/i18n'
+
+const M = defineMessages('projectSave', {
+  sharedTitle: "Saved as you work",
+  sharedDetail: "Changes in a shared project save for everyone as they are made.",
+  copy: "Make a copy",
+  browserTitle: "Saved in this browser",
+  browserDetail: "Your work saves here as you go. Download a copy to keep it outside the browser.",
+  download: "Download a copy",
+})
 
 export async function saveProject(store: EditorStore, controller: SceneSwapGuard = null): Promise<void> {
   const state = store.getState()
   if (state.readOnly) return
   if (state.collab) {
-    showSaveNoticeOnce(store, 'Saved as you work', 'Changes in a shared project save for everyone as they are made.', {
-      label: 'Make a copy',
+    showSaveNoticeOnce(store, t(M.sharedTitle), t(M.sharedDetail), {
+      label: t(M.copy),
       command: 'file.copyRoom',
     })
     return
@@ -35,8 +45,8 @@ export async function saveProject(store: EditorStore, controller: SceneSwapGuard
   if (forked) store.keepDemoCopy()
   const saved = store.persistProject()
   if (!saved.ok || forked) return // a failed save raises the autosave banner, which says why
-  showSaveNoticeOnce(store, 'Saved in this browser','Your work saves here as you go. Download a copy to keep it outside the browser.', {
-    label: 'Download a copy',
+  showSaveNoticeOnce(store, t(M.browserTitle), t(M.browserDetail), {
+    label: t(M.download),
     command: 'file.exportProject',
   })
 }

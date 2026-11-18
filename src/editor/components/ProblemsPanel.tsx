@@ -43,6 +43,10 @@ const M = defineMessages('problems', {
   warningsHidden: { one: 'No errors. {count} warning hidden.', other: 'No errors. {count} warnings hidden.' },
   repeated: { one: 'repeated {count} time', other: 'repeated {count} times' },
   checking: 'Checking the program...',
+  groupProgram: 'Program',
+  groupWiring: 'Wiring',
+  groupParts: 'Parts',
+  groupLayout: 'Layout',
 })
 
 interface ProblemsPanelProps {
@@ -226,6 +230,8 @@ export function ProblemsPanel({ store, state, controller }: ProblemsPanelProps) 
 
 const ICONS: Record<Problem['severity'], string> = { error: '✖', warning: '⚠' }
 
+const GROUP_LABELS = { Program: M.groupProgram, Wiring: M.groupWiring, Parts: M.groupParts, Layout: M.groupLayout } satisfies Record<Problem['group'], string>
+
 /** One row: a button, because it navigates (see the header). */
 function ProblemRow({ p, onGo }: { p: Problem; onGo: (p: Problem) => void }) {
   const action = rowAction(p)
@@ -240,7 +246,7 @@ function ProblemRow({ p, onGo }: { p: Problem; onGo: (p: Problem) => void }) {
       <span className="problems-icon" aria-hidden="true">
         {ICONS[p.severity]}
       </span>
-      <span className="problems-group">{p.group}</span>
+      <span className="problems-group">{t(GROUP_LABELS[p.group])}</span>
       <span className="problems-subject">{p.subject}</span>
       <span className="problems-message">{p.message}</span>
       {p.count !== undefined && (

@@ -9,12 +9,23 @@ import { getOipProjectApi } from './desktopProjectApi'
 import type { OpenedDocumentFile } from './desktopProjectApi'
 import { importProjectFile } from '../project/importProjectFile'
 import type { EditorStore } from '../store/store'
+import { defineMessages, t } from '../../core/i18n'
+
+const M = defineMessages('fileOpen', {
+  blockedRunning: "Stop the simulation first, then open the file again.",
+  blockedReadOnly: "This window is view-only.",
+  blocked: "Couldn't open “{name}”. {reason}",
+  replacePart: "A part “{name}” is already in this project. Replace it with the one from “{file}”?",
+  importFailed: "Couldn't import “{name}”:\n{error}",
+  imported: "Part imported",
+  importedDetail: "“{name}” is in this project's parts now.",
+})
 
 /** Why a file cannot be imported right now, or null when it can (the same rules as File > Import Project). */
 function blockedReason(store: EditorStore): string | null {
   const s = store.getState()
-  if (s.running) return 'Stop the simulation first, then open the file again.'
-  if (s.readOnly) return 'This window is view-only.'
+  if (s.running) return t(M.blockedRunning)
+  if (s.readOnly) return t(M.blockedReadOnly)
   return null
 }
 
@@ -26,7 +37,7 @@ export async function openDocumentFile(store: EditorStore, controller: EditorCon
   }
   const blocked = blockedReason(store)
   if (blocked !== null) {
-    alert(`Couldn't open “${file.name}”. ${blocked}`)
+    alert(t(M.blocked, { name: file.name, reason: blocked }))
     return
   }
   if (file.kind === 'project') {
@@ -34,9 +45,9 @@ export async function openDocumentFile(store: EditorStore, controller: EditorCon
     return
   }
   if (!controller) return
-  const error = await controller.importPart(file.bytes, (name) => confirm(`A part “${name}” is already in this project. Replace it with the one from “${file.name}”?`))
-  if (error) alert(`Couldn't import “${file.name}”:\n${error}`)
-  else store.showSaveNotice('Part imported', `“${file.name}” is in this project's parts now.`)
+  const error = await controller.importPart(file.bytes, (name) => confirm(t(M.replacePart, { name, file: file.name })))
+  if (error) alert(t(M.importFailed, { name: file.name, error }))
+  else store.showSaveNotice(t(M.imported), t(M.importedDetail, { name: file.name }))
 }
 
 /**

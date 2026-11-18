@@ -1,0 +1,192 @@
+{
+  "id": "training.pneumatic-cylinder",
+  "name": "双作用气缸 / Double-acting pneumatic cylinder",
+  "category": "Equipment",
+  "geometry": {
+    "kind": "rig",
+    "links": [
+      {
+        "name": "base",
+        "shape": {
+          "kind": "box",
+          "size": [
+            0.265,
+            0.02,
+            0.11
+          ],
+          "sizeParams": [
+            {
+              "axis": 0,
+              "param": "stroke",
+              "scale": 1,
+              "add": 0.145
+            }
+          ]
+        },
+        "offset": [
+          0,
+          0.01,
+          0
+        ],
+        "color": [
+          0.12,
+          0.15,
+          0.18
+        ]
+      },
+      {
+        "name": "barrel",
+        "shape": {
+          "kind": "cylinder",
+          "radius": 0.043,
+          "height": 0.22,
+          "sizeParams": [
+            {
+              "axis": 1,
+              "param": "stroke",
+              "add": 0.1
+            }
+          ]
+        },
+        "offset": [
+          0,
+          0.055,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          -1.5707963267948966
+        ],
+        "color": [
+          0.2,
+          0.43,
+          0.63
+        ]
+      },
+      {
+        "name": "gland",
+        "shape": {
+          "kind": "cylinder",
+          "radius": 0.046,
+          "height": 0.016
+        },
+        "offset": [
+          0.108,
+          0.055,
+          0
+        ],
+        "offsetParams": [
+          {
+            "axis": 0,
+            "param": "stroke",
+            "scale": 0.5,
+            "add": 0.048
+          }
+        ],
+        "rotation": [
+          0,
+          0,
+          -1.5707963267948966
+        ],
+        "color": [
+          0.22,
+          0.24,
+          0.25
+        ]
+      },
+      {
+        "name": "rod",
+        "shape": {
+          "kind": "cylinder",
+          "radius": 0.012,
+          "height": 0.16,
+          "sizeParams": [
+            {
+              "axis": 1,
+              "param": "stroke",
+              "add": 0.04
+            }
+          ]
+        },
+        "offset": [
+          0.048,
+          0.055,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          -1.5707963267948966
+        ],
+        "color": [
+          0.7,
+          0.73,
+          0.76
+        ]
+      },
+      {
+        "name": "tip",
+        "parent": "rod",
+        "shape": {
+          "kind": "box",
+          "size": [
+            0.028,
+            0.05,
+            0.05
+          ]
+        },
+        "offset": [
+          0,
+          0.084,
+          0
+        ],
+        "offsetParams": [
+          {
+            "axis": 1,
+            "param": "stroke",
+            "scale": 0.5,
+            "add": 0.024
+          }
+        ],
+        "color": [
+          0.31,
+          0.34,
+          0.36
+        ]
+      }
+    ],
+    "joints": [
+      {
+        "name": "stroke",
+        "link": "rod",
+        "type": "prismatic",
+        "axis": [
+          1,
+          0,
+          0
+        ],
+        "min": 0,
+        "max": 0.35,
+        "maxParam": {
+          "param": "stroke"
+        }
+      }
+    ],
+    "bounds": {
+      "length": 0.56,
+      "width": 0.11,
+      "top": 0.103,
+      "params": [
+        {
+          "field": "length",
+          "param": "stroke",
+          "scale": 3,
+          "add": 0.2
+        }
+      ]
+    }
+  },
+  "materials": [],
+  "behaviorSource": "// Double-acting cylinder with independent extend/retract commands and two end sensors.\n\nlet progress = null\nlet target = false\nlet lastManual\n\ndefinePart({\n  interactive: true,\n  useParam: 'manual',\n  joints: ['stroke'],\n  params: {\n    stroke: { type: 'number', default: 0.12, min: 0.02, max: 0.35, step: 0.01, unit: 'm', label: '行程 / Stroke' },\n    travelTime: { type: 'number', default: 0.4, min: 0.1, max: 3, step: 0.05, unit: 's', label: '单程时间 / Travel time' },\n    manual: { type: 'boolean', default: false, label: '手动伸出 / Manual extend', desc: '无 PLC 命令接管时可手动切换。 / Toggle manually when no PLC output owns either command.' },\n    extendTag: { type: 'tag', dir: 'in', stType: 'BOOL', autoWhenDriven: true, default: '', label: '伸出命令 / Extend command', group: 'I/O', desc: '接通时伸出。 / True extends the cylinder.' },\n    retractTag: { type: 'tag', dir: 'in', stType: 'BOOL', autoWhenDriven: true, default: '', label: '缩回命令 / Retract command', group: 'I/O', desc: '接通时缩回。两命令断开时保持上一次目标，两命令同时接通时停止。 / True retracts. Both off keeps the last destination, and both on holds position.' },\n    extendedTag: { type: 'tag', dir: 'out', stType: 'BOOL', default: '', label: '伸出到位反馈 / Extended feedback', group: 'I/O' },\n    retractedTag: { type: 'tag', dir: 'out', stType: 'BOOL', default: '', label: '缩回到位反馈 / Retracted feedback', group: 'I/O' },\n    conflictTag: { type: 'tag', dir: 'out', stType: 'BOOL', default: '', label: '命令冲突 / Command conflict', group: 'I/O' },\n  },\n  step(ctx) {\n    const p = ctx.params\n    if (progress === null) {\n      target = p.manual\n      progress = target ? 1 : 0\n    }\n    const autoExtend = ctx.tagDriven(p.extendTag)\n    const autoRetract = ctx.tagDriven(p.retractTag)\n    const extend = autoExtend && ctx.readTag(p.extendTag)\n    const retract = autoRetract && ctx.readTag(p.retractTag)\n    const conflict = extend && retract\n\n    if (autoExtend || autoRetract) {\n      if (extend !== retract) target = extend\n    } else {\n      if (p.manual !== lastManual) target = p.manual\n      if (ctx.used()) target = !target\n    }\n    lastManual = p.manual\n\n    if (!conflict) progress = ctx.approach(progress, target ? 1 : 0, ctx.dt / p.travelTime)\n    ctx.joints.stroke = progress * p.stroke\n    ctx.report('manual', target)\n    if (p.extendedTag) ctx.writeTag(p.extendedTag, progress >= 1)\n    if (p.retractedTag) ctx.writeTag(p.retractedTag, progress <= 0)\n    if (p.conflictTag) ctx.writeTag(p.conflictTag, conflict)\n  },\n})\n\n"
+}

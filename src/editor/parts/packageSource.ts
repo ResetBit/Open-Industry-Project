@@ -9,6 +9,7 @@
 //
 // No-op in the browser (no window.oipParts).
 
+import { defineMessages, t } from '../../core/i18n'
 import { registerPackage } from '../../core/parts/partRegistry'
 import { validatePartPackage } from '../../core/parts/partValidate'
 import { buildPackage } from '../../sim/buildPackage'
@@ -16,6 +17,20 @@ import type { PackageManifest } from '../../sim/buildPackage'
 import { getOipPartsApi } from '../desktop/desktopPartsBridge'
 import type { WorkspaceScan } from '../desktop/desktopPartsBridge'
 import type { EditorStore } from '../store/store'
+
+const M = defineMessages('packageSourceNotice', {
+  legacyTitle: 'Parts now live in each project',
+  legacyNames: '{shown} and {more} more',
+  legacyBody: {
+    one: '{count} part in {root} ({shown}) is no longer loaded on its own. Copies already placed in a scene keep working. To use the rest in a project, Import part in the Parts panel brings them in: choose A folder of parts.',
+    other: '{count} parts in {root} ({shown}) are no longer loaded on their own. Copies already placed in a scene keep working. To use the rest in a project, Import part in the Parts panel brings them in: choose A folder of parts.',
+  },
+  importedTitle: 'Parts imported',
+  importedBody: {
+    one: '{count} part from {root} is now in this project.',
+    other: '{count} parts from {root} are now in this project.',
+  },
+})
 
 /** One part's build result, for the build-failure toast + catalog badge (store.applyPackageStatuses). */
 export interface PackageStatus {
@@ -46,11 +61,9 @@ export function tellAboutLegacyParts(store: Pick<EditorStore, 'showSaveNotice'>,
     return // no storage: better silent than the same notice on every launch
   }
   const n = names.length
-  const shown = names.slice(0, 3).join(', ') + (n > 3 ? ` and ${n - 3} more` : '')
-  store.showSaveNotice(
-    'Parts now live in each project',
-    `${n} part${n === 1 ? '' : 's'} in ${root} (${shown}) ${n === 1 ? 'is' : 'are'} no longer loaded on ${n === 1 ? 'its' : 'their'} own. Copies already placed in a scene keep working. To use the rest in a project, Import part in the Parts panel brings them in: choose A folder of parts.`,
-  )
+  const namesShown = names.slice(0, 3).join(', ')
+  const shown = n > 3 ? t(M.legacyNames, { shown: namesShown, more: n - 3 }) : namesShown
+  store.showSaveNotice(t(M.legacyTitle), t(M.legacyBody, { count: n, root, shown }))
 }
 
 /**
@@ -86,7 +99,7 @@ export async function importPartsFolder(store: EditorStore): Promise<void> {
   const statuses = importScannedParts(store, scan)
   store.applyPackageStatuses(statuses)
   const n = statuses.filter((s) => s.ok).length
-  if (n > 0) store.showSaveNotice('Parts imported', `${n} part${n === 1 ? '' : 's'} from ${scan.root} ${n === 1 ? 'is' : 'are'} now in this project.`)
+  if (n > 0) store.showSaveNotice(t(M.importedTitle), t(M.importedBody, { count: n, root: scan.root }))
 }
 
 /**

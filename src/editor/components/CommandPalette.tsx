@@ -19,6 +19,7 @@ import { PART_DEFS } from '../../core/types'
 import { commandChord, commandDisabledReason, commandEnabled, groupLabel, runCommand, visibleCommands } from '../commands'
 import { DESKTOP_SHELL } from '../desktop/desktopMenuBridge'
 import { englishAlias, rankPaletteItems, type PaletteItem } from '../paletteItems'
+import { translatePartMetadata } from '../parts/partMetadata'
 import type { EditorController } from '../controller'
 import type { EditorState, EditorStore } from '../store/store'
 import { defineMessages, messageSource, t } from '../../core/i18n'
@@ -99,21 +100,26 @@ export function CommandPalette({ store, state, controller, onClose }: CommandPal
     if (!state.readOnly && !state.running) {
       for (const [type, def] of Object.entries(PART_DEFS)) {
         if (def.noCatalog) continue
+        const label = translatePartMetadata(def.label)
         out.push({
           key: `cat:${type}`,
           kind: 'catalog',
           group: 'Parts', // identity: groupChip renders the heading
-          label: def.label,
+          label,
+          alias: englishAlias(label, def.label),
           detail: t(M.place),
           target: { kind: 'catalog', type },
         })
       }
+      const bundled = new Set(state.bundledPackages)
       for (const pkg of [...state.bundledPackages, ...state.userPackages]) {
+        const label = bundled.has(pkg) ? translatePartMetadata(pkg.name) : pkg.name
         out.push({
           key: `cat:pkg:${pkg.id}`,
           kind: 'catalog',
           group: 'Parts',
-          label: pkg.name,
+          label,
+          alias: englishAlias(label, pkg.name),
           detail: t(M.place),
           target: { kind: 'catalog', type: 'part', packageId: pkg.id },
         })

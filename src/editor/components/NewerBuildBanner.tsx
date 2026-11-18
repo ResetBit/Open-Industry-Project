@@ -44,7 +44,7 @@ export function NewerBuildBanner({
         <span className="autosave-banner-body">{t(M.bodyBrowser)}</span>
       )}
       {desktop ? (
-        <button type="button" className="autosave-banner-action" onClick={onUpdate}>
+        <button type="button" className="autosave-banner-action" onClick={onUpdate} disabled={!onUpdate}>
           {t(M.getUpdate)}
         </button>
       ) : (

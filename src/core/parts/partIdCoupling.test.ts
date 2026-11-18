@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest'
 const CONTENT: Record<string, string> = {
   'editor/demo/demoScenes.ts': 'the demo scenes place the parts they show',
   'editor/demo/demoAcceptance.ts': 'checks the demo scenes it belongs to',
+  'editor/training/visionInspectionProject.ts': 'places the bundled parts used in the vision lesson scene',
   'editor/parts/bundledExamples.ts': 'the list of parts the app ships',
   'editor/tutorial/steps.ts': 'the tutorial walks through particular parts',
   'editor/prefetchSceneAssets.ts': "warms the demo's cargo textures before its first frame",

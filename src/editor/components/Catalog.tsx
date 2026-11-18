@@ -1,4 +1,5 @@
 import { partCreditText } from '../parts/partCredit'
+import { translatePartMetadata } from '../parts/partMetadata'
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, DragEvent, MouseEvent as ReactMouseEvent } from 'react'
 import { versionedAssetUrl } from '../../core/assetVersions'
@@ -396,10 +397,15 @@ export function Catalog({ state, controller, thumbnails, packageThumbnails, pend
   const activeCategory = tabs.find((c) => sameCategory(c, category)) ?? tabs[0] ?? 'Equipment'
   // search spans every category; otherwise the active tab decides what shows.
   // noCatalog types (the Group node, the generic 'part') are never placed directly from the palette.
+  const shownPackageName = (pkg: PartPackage): string => bundledSet.has(pkg) ? translatePartMetadata(pkg.name) : pkg.name
   const matchesPackage = (pkg: PartPackage): boolean =>
-    searching ? pkg.name.toLowerCase().includes(q) || pkg.id.toLowerCase().includes(q) : sameCategory(packageCategory(pkg), activeCategory)
+    searching
+      ? [shownPackageName(pkg), pkg.name, pkg.id].some((text) => text.toLowerCase().includes(q))
+      : sameCategory(packageCategory(pkg), activeCategory)
   const defs = listedDefs.filter((def) =>
-    searching ? def.label.toLowerCase().includes(q) || def.type.toLowerCase().includes(q) : def.category === activeCategory,
+    searching
+      ? [translatePartMetadata(def.label), def.label, def.type].some((text) => text.toLowerCase().includes(q))
+      : def.category === activeCategory,
   )
   const customCards = listedCustom.filter(matchesPackage)
   const shelfCards = fromShelf.filter(matchesPackage)
@@ -607,7 +613,7 @@ export function Catalog({ state, controller, thumbnails, packageThumbnails, pend
                   : blocked
                     ? t(M.oneBuilding)
                     : // i18n-ok: the part's own label and param readout, joined
-                      `${def.label} · ${numberHint(def)}`
+                      `${translatePartMetadata(def.label)} · ${numberHint(def)}`
               }
               // pointer-based placement (not native HTML5 DnD): capture the pointer
               // so the card alone steers the gesture and forwards it to the controller.
@@ -651,7 +657,7 @@ export function Catalog({ state, controller, thumbnails, packageThumbnails, pend
                   />
                 )}
               </span>
-              <span className="catalog-card-label">{def.label}</span>
+              <span className="catalog-card-label">{translatePartMetadata(def.label)}</span>
             </button>
           )
         })}
@@ -706,7 +712,7 @@ export function Catalog({ state, controller, thumbnails, packageThumbnails, pend
                       // nothing else on the card shows. A first-party package gets its bare name: the tooltip is
                       // still useful because the label ellipsizes, but its category is just the tab you are on.
                       // A library copy says who made it (editor/parts/partCredit.ts).
-                      bundledSet.has(pkg) ? pkg.name : pkg.credit ? t(M.credited, { name: pkg.name, credit: partCreditText(pkg) }) : t(M.customPart, { name: pkg.name })
+                      bundledSet.has(pkg) ? shownPackageName(pkg) : pkg.credit ? t(M.credited, { name: pkg.name, credit: partCreditText(pkg) }) : t(M.customPart, { name: pkg.name })
               }
               onClick={(e) => keyboardPlace(e, 'part', pkg.id)}
               // hover-preload the custom part's package assets (see built-in card above)
@@ -751,7 +757,7 @@ export function Catalog({ state, controller, thumbnails, packageThumbnails, pend
                 })()}
                 {buildError && <span className="catalog-card-error-badge" aria-label={t(M.buildError)}>⚠</span>}
               </span>
-              <span className="catalog-card-label">{pkg.name}</span>
+              <span className="catalog-card-label">{shownPackageName(pkg)}</span>
             </button>
             {/* always-visible badges, stacked in the corner: what to decide about this part, not hover tools */}
             {(update || shelfStatus) && (

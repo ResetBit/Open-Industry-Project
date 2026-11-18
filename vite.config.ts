@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { PRODUCT_NAME } from './src/editor/productBrand.ts'
 import { computeAssetVersions } from './scripts/lib/asset-versions.mjs'
 import { bundledLicenses } from './scripts/lib/bundled-licenses.mjs'
 import { monacoDompurify } from './scripts/lib/monaco-dompurify.mjs'
@@ -222,8 +223,8 @@ export default defineConfig({
       // copied verbatim into dist so the manifest/index can reference them
       includeAssets: ['favicon-16.png', 'favicon-32.png', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Open Industry Project',
-        short_name: 'OIP',
+        name: PRODUCT_NAME,
+        short_name: PRODUCT_NAME,
         description: 'Browser-based industrial conveyor and material-handling simulator.',
         // the toolbar's colour, not the app background: this tints the status bar, and the
         // toolbar is what sits under it. background_color below stays --bg (it is the splash).

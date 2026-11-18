@@ -4,6 +4,7 @@
 // controller it drives (PilotDeps). The editor's C press (useSelection) also pins live cargo, a drag-area
 // rule, so it alone takes the whole controller.
 
+import { defineMessages, t } from '../../core/i18n'
 import type { BoxFrame } from '../../core/frame'
 import { commsOn } from '../../core/conveyor/conveyorDirection'
 import { buildAuthoredCargoFrame, isCargoPart } from '../../core/frame'
@@ -20,6 +21,16 @@ import type { BoxPick } from '../../render/api'
 import { IdleUseSession, idleKey } from '../../sim/idlePose'
 import type { EditorController } from '../controller'
 import { toggleCargoPin } from './drag'
+
+const M = defineMessages('pilotPrompt', {
+  drop: 'Drop',
+  letGo: 'Let go',
+  pickUp: 'Pick up',
+  use: 'Use',
+  brakesOn: 'Brakes on',
+  pull: 'Pull',
+  auto: 'In auto - PLC controlled',
+})
 
 type EdState = ReturnType<EditorController['store']['getState']>
 
@@ -84,7 +95,7 @@ export function pilotInteract(p: PilotState, ec: PilotDeps): void {
         ec.frozenCargo.delete(partId)
         ec.sim.holdBody(partId, true)
         p.carry = { partId }
-        ec.store.setPilotPrompt('Drop')
+        ec.store.setPilotPrompt(t(M.drop))
       }
       return
     }
@@ -351,21 +362,21 @@ function refreshPilotPrompt(p: PilotState, ec: PilotDeps): boolean {
   if (p.carry) return true // the prompt stays 'Drop', and the press drops
   if (p.flex) {
     pullFlex(p, ec)
-    ec.store.setPilotPrompt('Let go')
+    ec.store.setPilotPrompt(t(M.letGo))
     return true
   }
   if (s.running && ec.view.pilotLookBox()) {
-    ec.store.setPilotPrompt('Pick up')
+    ec.store.setPilotPrompt(t(M.pickUp))
     return true
   }
   if (ec.view.pilotLookDockLeaf()) {
-    ec.store.setPilotPrompt('Use')
+    ec.store.setPilotPrompt(t(M.use))
     return true
   }
   const flex = flexUnderCrosshair(ec)
   if (flex) {
     // a braked end says why it won't move, rather than offering a Pull the press would ignore
-    ec.store.setPilotPrompt(flex.braked ? 'Brakes on' : 'Pull')
+    ec.store.setPilotPrompt(t(flex.braked ? M.brakesOn : M.pull))
     return !flex.braked
   }
   const usableId = pilotUsableUnderCrosshair(ec)
@@ -376,7 +387,7 @@ function refreshPilotPrompt(p: PilotState, ec: PilotDeps): boolean {
   // ownership is invisible state, so it must be surfaced at the point of interaction: an owned device tells
   // the pilot who has it instead of offering a dead "Use" (the press would be ignored by the script's auto gate)
   const auto = partUseInAuto(p, ec, usableId, s)
-  ec.store.setPilotPrompt(auto ? 'In auto - PLC controlled' : 'Use')
+  ec.store.setPilotPrompt(t(auto ? M.auto : M.use))
   return !auto
 }
 

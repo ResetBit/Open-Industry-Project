@@ -1,4 +1,5 @@
 import type { PartType } from '../../core/types'
+import { defineMessages, t } from '../../core/i18n'
 
 /**
  * One-line property descriptions shown as inspector hover tooltips, for the rows the host owns.
@@ -37,6 +38,8 @@ export const PARAM_DESC: Record<string, string> = {
   // shadow-map resolution is a per-client preference (render/quality.ts), not a scene param
 }
 
+const descriptions = defineMessages('inspector.hostProperty', PARAM_DESC)
+
 /**
  * Description for a part property, or undefined when none is registered. A bare key (the `_`-prefixed
  * built-in rows) applies to every part type, so it is the fallback for the type-qualified lookup. Without
@@ -45,5 +48,6 @@ export const PARAM_DESC: Record<string, string> = {
  * Note this is the fallback: ParamField prefers the package's own `spec.desc`.
  */
 export function paramDesc(type: PartType, key: string): string | undefined {
-  return PARAM_DESC[`${type}.${key}`] ?? PARAM_DESC[key]
+  const id = descriptions[`${type}.${key}`] ?? descriptions[key]
+  return id ? t(id) : undefined
 }

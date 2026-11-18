@@ -5,7 +5,7 @@ import { DEFAULT_ROTATE_SNAP_DEG } from '../../core/types'
 import { defaultTranslateSnap, toStored, unitView } from '../../core/units'
 import { sceneDisplayUnits } from '../../core/scene/sceneUnits'
 import type { EditorController } from '../controller'
-import { IS_MAC, keyHint, withKey } from '../keyHint'
+import { IS_MAC, keyHint, withKey, withKeys } from '../keyHint'
 import type { EditorState, EditorStore, ToolMode } from '../store/store'
 import { useDismiss } from './popover'
 import { defineMessages, t, type MessageId } from '../../core/i18n'
@@ -42,7 +42,7 @@ const M = defineMessages('viewportToolbar', {
   faceSnapHint:
     'Tiling parts (racks) land flush on neighbor faces ({faceKey}). Cargo is left out on purpose: a box is smaller than the grab distance, so it would snap to neighbors it does not touch. Hold Alt during {repositionKey} to face-snap anything onto the surface under the cursor.',
   resetDefaults: 'Reset to defaults',
-  vertexSnapTitle: 'Vertex Snap (hold B)',
+  vertexSnapTitle: 'Vertex Snap (hold {key:snap.vertex})',
   base: 'Base',
   vertex: 'Vertex',
   origin: 'Origin',
@@ -457,7 +457,7 @@ function SnapConfig({ store, state, onClose }: SnapConfigProps) {
       </button>
 
       {/* vertex-snap (hold B) options */}
-      <div className="snap-config-title snap-config-sub">{t(M.vertexSnapTitle)}</div>
+      <div className="snap-config-title snap-config-sub">{withKeys(t(M.vertexSnapTitle))}</div>
       <SnapChoice
         label={t(M.base)}
         value={state.vertexSnapOriginMode ? 'origin' : 'vertex'}

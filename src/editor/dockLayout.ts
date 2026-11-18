@@ -816,7 +816,7 @@ export function dockSizeVar(key: string): string {
  * `leftA`/`leftB`/`rightA`/`rightB` for the columns (A = primary/edge, B =
  * secondary/inner) and `gutlA`/`gutlB`/`gutrA`/`gutrB` for their resize gutters.
  */
-export function buildDockGrid(layout: DockLayout, sizes: DockSizes): DockGridStyle {
+export function buildDockGrid(layout: DockLayout, sizes: DockSizes, toolbarHeight = TOOLBAR_ROW): DockGridStyle {
   // A maximized panel takes the whole shell below the toolbar: every dock column and the
   // bottom dock collapse away. The single remaining cell is still named `viewport` because
   // the viewport element stays in it: the maximized panel shares the cell and paints over
@@ -825,7 +825,7 @@ export function buildDockGrid(layout: DockLayout, sizes: DockSizes): DockGridSty
   if (layout.maximized) {
     return {
       gridTemplateColumns: 'minmax(0, 1fr)',
-      gridTemplateRows: '48px minmax(0, 1fr)',
+      gridTemplateRows: `${toolbarHeight}px minmax(0, 1fr)`,
       gridTemplateAreas: '"toolbar" "viewport"',
     }
   }
@@ -869,7 +869,7 @@ export function buildDockGrid(layout: DockLayout, sizes: DockSizes): DockGridSty
   // columns and their gutters carried on down from the row above
   const viewportCol = mid.indexOf('viewport')
   const underLeft = (name: string): string => [...Array(viewportCol + 1).fill(name), ...mid.slice(viewportCol + 1)].join(' ')
-  const rows = [`${TOOLBAR_ROW}px`, 'minmax(0, 1fr)']
+  const rows = [`${toolbarHeight}px`, 'minmax(0, 1fr)']
   const areas = [span('toolbar'), mid.join(' ')]
   if (hasBottom) {
     if (layout.bottomCollapsed) {

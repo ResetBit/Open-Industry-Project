@@ -22,6 +22,7 @@
 // Timing: the folder's fingerprint is checked once a second (cheap - sizes and dates, no contents);
 // the project is serialized only when the fingerprint moved or the app saved something since.
 
+import { defineMessages, t } from '../../core/i18n'
 import { AGENT_GUIDE, PROGRAM_DIR, PROGRAM_FILE, PROJECT_MANIFEST, folderFilesToProject, partFolderPaths, projectToFolderFiles, unreferencedProjectFiles } from '../../core/project/projectFolder'
 import type { ProjectFolderFile } from '../../core/project/projectFolder'
 import type { ProjectJSON } from '../../core/project/project'
@@ -45,6 +46,11 @@ import type { EditorStore } from '../store/store'
 import { onShippedAssetsWarmed } from '../parts/shippedAssetCache'
 import { onSharedWriteBack, ownSharedProject, sharedProjectNow } from './sharedProject'
 import { FOLDER_OPTIONS } from './folderOptions'
+
+const M = defineMessages('projectFolderSyncNotice', {
+  saved: 'Saved as a folder',
+  folder: 'This project now lives in {root}. Changes save there as you work.',
+})
 
 /**
  * What the engine needs from whatever holds the folder. The desktop shell (OipProjectApi) provides all of
@@ -589,7 +595,7 @@ async function giveFolder(s: EditorStore): Promise<boolean> {
     s.setFolderLink(null, `Couldn't save this project to ${made.root}: ${error}`)
     return false
   }
-  s.showSaveNotice('Saved as a folder', `This project now lives in ${made.root}. Changes save there as you work.`)
+  s.showSaveNotice(t(M.saved), t(M.folder, { root: made.root }))
   return true
 }
 

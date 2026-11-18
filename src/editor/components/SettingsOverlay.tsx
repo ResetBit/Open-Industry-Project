@@ -33,7 +33,7 @@ import {
 import { forgetTrustedRooms, trustedRoomCount } from '../../collab/codeTrust'
 import { getDisplayName, setDisplayName } from '../../collab/session'
 import { appearancePref, setAppearancePref, type Appearance } from '../appearance'
-import { browserLanguage, languagePref, ownLanguageName, setLanguagePref, translatorSupported, type LanguagePref } from '../autoTranslate'
+import { browserLanguage, languagePref, ownLanguageName, setLanguagePref, translatorSupported, usesBundledChinese, type LanguagePref } from '../autoTranslate'
 import { rebindAction, resetAction, resetAllActions } from '../keymapPrefs'
 import { getCommand, runCommand } from '../commands'
 import { setNavPref } from '../navigationPrefs'
@@ -75,6 +75,8 @@ const M = defineMessages('settings', {
   language: 'Language',
   languageAuto: 'Automatic ({language})',
   languageEnglish: 'English',
+  languageChinese: '简体中文', // The language name remains readable before the locale changes.
+  languageChineseHint: 'Uses the built-in Simplified Chinese interface.',
   languageAutoHint: 'Your browser translates the editor on this device. Tags, programs and part names stay as written.',
   languageNoTranslator: 'This browser has no built-in translator, so the editor stays in English.',
   languageBrowserEnglish: "Your browser's language is English.",
@@ -112,7 +114,7 @@ const M = defineMessages('settings', {
   yourName: 'Your name',
   yourNameHint: 'shown to others in a shared project; empty shows an animal',
   collabServer: 'Collaboration server',
-  collabServerHint: "where the rooms you start are kept, as ws:// or wss://; empty uses the Open Industry Project's server. Links you share name it.",
+  collabServerHint: "where the rooms you start are kept, as ws:// or wss://; empty uses the default collaboration server. Links you share name it.",
   collabServerBad: 'not a ws:// or wss:// address, so the default server stays',
   namePlaceholder: 'shown to collaborators',
   trustedRooms: 'Shared projects allowed to run part code',
@@ -261,11 +263,15 @@ function PreferencesSection({ store, state }: { store: EditorStore; state: Edito
   const [language, setLanguage] = useState<LanguagePref>(() => languagePref())
   const [bootLanguage] = useState<LanguagePref>(() => languagePref())
   const browserLang = browserLanguage()
-  const languageHint = !translatorSupported()
-    ? t(M.languageNoTranslator)
-    : browserLang === null
-      ? t(M.languageBrowserEnglish)
-      : t(M.languageAutoHint)
+  const languageHint = usesBundledChinese(language, browserLang)
+    ? t(M.languageChineseHint)
+    : language === 'en'
+      ? undefined
+      : !translatorSupported()
+        ? t(M.languageNoTranslator)
+        : browserLang === null
+          ? t(M.languageBrowserEnglish)
+          : t(M.languageAutoHint)
   // the Trackball hint names its chord from the active keymap, and the Keyboard tab next door is
   // where that chord gets rebound, so re-render on one, the way the toolbar's tooltips do
   useSyncExternalStore(subscribeKeymap, keymapRev)
@@ -312,6 +318,7 @@ function PreferencesSection({ store, state }: { store: EditorStore; state: Edito
             }}
           >
             <option value="auto">{t(M.languageAuto, { language: browserLang ? ownLanguageName(browserLang) : t(M.languageEnglish) })}</option>
+            <option value="zh-CN">{t(M.languageChinese)}</option>
             <option value="en">{t(M.languageEnglish)}</option>
           </select>
         </Row>

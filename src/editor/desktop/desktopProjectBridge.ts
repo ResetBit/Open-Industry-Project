@@ -26,6 +26,20 @@ import type { FolderRead } from './desktopProjectApi'
 import { saveIntoFolder, saveToFolderNow, syncFolderNow, syncedFolderPath } from '../project/projectFolderSync'
 import type { SceneSwapGuard } from '../project/projectFolderLink'
 import type { EditorStore } from '../store/store'
+import { defineMessages, t } from '../../core/i18n'
+
+const M = defineMessages('desktopProject', {
+  openKeep: "Open \"{name}\"? The project you have open now is kept under Projects.",
+  openReplace: "Open \"{name}\"? This replaces the current project (its autosave is overwritten).",
+  openError: "Couldn't open \"{name}\":\n{error}",
+  replaceFolder: "\"{folder}\" already holds a project. Replace it with \"{name}\"?",
+  saveError: "Couldn't save the project folder:\n{error}",
+  folderSaved: "Saved to folder",
+  folderDetail: "This project now lives in {path}. Changes save there as you work.",
+  folderName: "the folder \"{path}\"",
+  saved: "Saved",
+  savedDetail: "All changes are in {where}.",
+})
 
 export { getOipProjectApi } from './desktopProjectApi'
 export type { OipProjectApi } from './desktopProjectApi'
@@ -64,13 +78,11 @@ async function openFolderRead(store: EditorStore, read: FolderRead): Promise<voi
   if (read.docId === null) {
     // Same wording split as the web import: with a library this opens the folder beside the project on
     // screen; without one it is a replacement, and the question has to say so.
-    const ask = supportsDocumentLibrary()
-      ? `Open "${result.project.name}"? The project you have open now is kept under Projects.`
-      : `Open "${result.project.name}"? This replaces the current project (its autosave is overwritten).`
+    const ask = t(supportsDocumentLibrary() ? M.openKeep : M.openReplace, { name: result.project.name })
     if (!confirm(ask)) return
   }
   const error = await adoptFolderProject(store, read.root, read.docId, result)
-  if (error !== null) alert(`Couldn't open "${result.project.name}":\n${error}`)
+  if (error !== null) alert(t(M.openError, { name: result.project.name, error }))
 }
 
 /**
@@ -215,16 +227,16 @@ export async function saveProjectToFolder(store: EditorStore, controller: SceneS
   }
   if (picked.hasProject) {
     const ok = confirm(
-      `"${folderDisplayName(picked.root)}" already holds a project. Replace it with "${store.getState().projectName}"?`,
+      t(M.replaceFolder, { folder: folderDisplayName(picked.root), name: store.getState().projectName }),
     )
     if (!ok) return
   }
   const error = await saveIntoFolder(store, controller, picked.root, { replace: true })
   if (error !== null) {
-    alert(`Couldn't save the project folder:\n${error}`)
+    alert(t(M.saveError, { error }))
     return
   }
-  store.showSaveNotice('Saved to folder', `This project now lives in ${picked.root}. Changes save there as you work.`)
+  store.showSaveNotice(t(M.folderSaved), t(M.folderDetail, { path: picked.root }))
 }
 
 /**
@@ -243,8 +255,10 @@ export async function saveProjectNow(store: EditorStore, controller: SceneSwapGu
   if (outcome === 'needsFolder') return saveProjectToFolder(store, controller)
   const path = store.getState().folderPath
   // the desktop knows the folder's full path; a browser only its name
-  const where = getOipProjectApi() !== null ? path : `the folder "${path}"`
-  if (outcome === 'saved' && path !== null && !forked) showSaveNoticeOnce(store, 'Saved', `All changes are in ${where}.`)
+  if (outcome === 'saved' && path !== null && !forked) {
+    const where = getOipProjectApi() !== null ? path : t(M.folderName, { path })
+    showSaveNoticeOnce(store, t(M.saved), t(M.savedDetail, { where }))
+  }
 }
 
 const toldSaved = new WeakSet<EditorStore>()

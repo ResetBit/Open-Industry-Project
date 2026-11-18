@@ -35,6 +35,7 @@ import { bedOf, conveyorEndsOf, isConveyorLike, partFootprint, toLocalXZ, toWorl
 import { commsOn } from './conveyor/conveyorDirection'
 import { INTERIOR_COLUMN_SIZE, interiorColumnHeight, interiorColumns } from './building/buildingColumns'
 import { cargoView } from './frame'
+import { defineMessages, t } from './i18n'
 import type { PartInstance } from './types'
 
 /**
@@ -43,12 +44,22 @@ import type { PartInstance } from './types'
  */
 const GUEST_SNAPS = ['mounts', 'track', 'edgeMount'] as const
 
-/** Human phrasing per guest kind, so the finding says what the part expected rather than naming a field. */
-const EXPECTED: Record<(typeof GUEST_SNAPS)[number], string> = {
-  mounts: 'mounts onto a host surface',
-  track: 'seats into a conveyor bed',
-  edgeMount: 'seats on a host deck edge',
-}
+const M = defineMessages('layoutCheck', {
+  mounts: 'mounts onto a host surface, but nothing is within reach of it',
+  track: 'seats into a conveyor bed, but nothing is within reach of it',
+  edgeMount: 'seats on a host deck edge, but nothing is within reach of it',
+  column: 'stands in the building column at ({x}, {z})',
+  spur: 'spur',
+  endJoinSide: 'its end meets the side of {spurName}, a {kind} conveyor that takes end joins only, so its guard stays closed there: merge onto a straight or a belt instead',
+  fixSpacing: 'Fix: conveyorId = "{beltId}" and keepSpacing = true (holds the feed while the belt is stopped, and keeps one pitch between boxes across the stop)',
+  fixHeldSpacing: 'Fix: conveyorId = "{beltId}" (holds the feed while the belt is stopped, and keeps one pitch between boxes across the stop)',
+  fixHeld: 'Fix: conveyorId = "{beltId}" (holds the feed while the belt is stopped)',
+  feedRef: 'conveyorId "{id}"',
+  feedTag: 'runTag "{tag}"',
+  feedLostSpacing: 'holds with {beltName} ({pairedBy}) but keepSpacing is off: while held its interval runs down, so the first box after the belt restarts drops at once, onto the box still under the drop. Fix: keepSpacing = true',
+  feedAlwaysRuns: 'drops boxes onto {beltName}, whose runTag "{beltTag}" is driven, and nothing holds it (no conveyorId, no driven runTag): whenever the belt stops, boxes stack at the drop point. {fix}',
+  feedRunsWithoutBelt: 'drops boxes onto {beltName} but runs on its own runTag "{feedTag}", which the program drives on while the belt\'s "{beltTag}" is off: whenever it does, boxes stack at the drop point. {fix}',
+})
 
 /**
  * How close a host has to be to count as one. Generous: this check catches a part
@@ -236,7 +247,7 @@ export function checkLayout(parts: readonly PartInstance[], options: LayoutCheck
       packageId: (box.part as { packageId: string }).packageId,
       kind: 'unseated',
       severity: 'error',
-      detail: `${EXPECTED[kinds[0]!]}, but nothing is within reach of it`,
+      detail: t(M[kinds[0]!]),
     })
   }
   findings.push(...columnFindings(parts))
@@ -304,7 +315,7 @@ function columnFindings(parts: readonly PartInstance[]): LayoutFinding[] {
       packageId: part.type === 'part' ? part.packageId : part.type,
       kind: 'column',
       severity: 'error',
-      detail: `stands in the building column at (${hit.x.toFixed(1)}, ${hit.z.toFixed(1)})`,
+      detail: t(M.column, { x: hit.x.toFixed(1), z: hit.z.toFixed(1) }),
     })
   }
   return out
@@ -348,7 +359,7 @@ function endJoinSideFindings(parts: readonly PartInstance[]): LayoutFinding[] {
         packageId: other.type === 'part' ? other.packageId : other.type,
         kind: 'endJoinSide',
         severity: 'warning',
-        detail: `its end meets the side of ${spurName}, a ${bed.kind} conveyor that takes end joins only, so its guard stays closed there: merge onto a straight or a belt instead`,
+        detail: t(M.endJoinSide, { spurName, kind: bed.kind === 'spur' ? t(M.spur) : bed.kind }),
       })
     }
   }
@@ -439,20 +450,16 @@ function feedFindings(parts: readonly PartInstance[], driven: ReadonlySet<string
     const vw = specs.find((s) => s.key === 'keepSpacing')?.visibleWhen
     const spacing = visibleWhenHolds(vw, vw ? switchValue(specs, feed.params, vw.param) : undefined)
     const keep = paramOf(feed, 'keepSpacing') === true
-    const fix = spacing
-      ? `Fix: conveyorId = "${belt.id}"${keep ? '' : ' and keepSpacing = true'} (holds the feed while the belt is stopped, and keeps one pitch between boxes across the stop)`
-      : `Fix: conveyorId = "${belt.id}" (holds the feed while the belt is stopped)`
+    const fix = t(spacing ? (keep ? M.fixHeldSpacing : M.fixSpacing) : M.fixHeld, { beltId: belt.id })
     let detail: string
     if (interlocked || (gated && feedTag === beltTag)) {
       if (keep || !spacing) continue
-      detail =
-        `holds with ${beltName} (${interlocked ? `conveyorId "${ref!.id}"` : `runTag "${beltTag}"`}) but keepSpacing is off: ` +
-        'while held its interval runs down, so the first box after the belt restarts drops at once, onto the box ' +
-        'still under the drop. Fix: keepSpacing = true'
+      const pairedBy = ref && interlocked ? t(M.feedRef, { id: ref.id }) : t(M.feedTag, { tag: beltTag })
+      detail = t(M.feedLostSpacing, { beltName, pairedBy })
     } else if (!gated) {
-      detail = `drops boxes onto ${beltName}, whose runTag "${beltTag}" is driven, and nothing holds it (no conveyorId, no driven runTag): whenever the belt stops, boxes stack at the drop point. ${fix}`
+      detail = t(M.feedAlwaysRuns, { beltName, beltTag, fix })
     } else if (seen?.(feedTag, beltTag) === true) {
-      detail = `drops boxes onto ${beltName} but runs on its own runTag "${feedTag}", which the program drives on while the belt's "${beltTag}" is off: whenever it does, boxes stack at the drop point. ${fix}`
+      detail = t(M.feedRunsWithoutBelt, { beltName, feedTag, beltTag, fix })
     } else continue
     const name = typeof feed.name === 'string' && feed.name !== '' ? feed.name : undefined
     out.push({ partId: feed.id, ...(name !== undefined ? { partName: name } : {}), packageId: feed.packageId, kind: 'feed', severity: 'warning', detail })

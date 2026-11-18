@@ -23,6 +23,7 @@
 // a real folder, so `supportsFolderLink()` is false there and the commands are greyed out. The desktop
 // has its own host (desktopProjectApi.ts), so none of this runs there.
 
+import { defineMessages, t } from '../../core/i18n'
 import { folderFilesToProject, PROJECT_MANIFEST, PROJECT_ROOT_FILES, PROJECT_SUBDIRS } from '../../core/project/projectFolder'
 import type { ProjectFolderFile } from '../../core/project/projectFolder'
 import type { ProjectJSON } from '../../core/project/project'
@@ -37,6 +38,11 @@ import { getOipProjectApi } from '../desktop/desktopProjectApi'
 import { detachProjectFolder, followFolder, releaseFolder, saveIntoFolder, syncFolderNow, syncedFolderPath } from './projectFolderSync'
 import type { FolderApi } from './projectFolderSync'
 import type { EditorStore } from '../store/store'
+
+const M = defineMessages('projectFolderLinkNotice', {
+  saved: 'Saved to folder',
+  folder: 'This project now lives in the folder "{name}". Changes save there as you work.',
+})
 
 /** The subdirectories a project folder holds (the codec's own list): reading exactly these (plus the root
  *  manifest) keeps the sweep bounded and predictable. */
@@ -431,7 +437,7 @@ export async function saveProjectToFolderHandle(dir: DirLike, store: EditorStore
   if (error !== null) return error
   pending = null
   store.setFolderPaused(null)
-  store.showSaveNotice('Saved to folder', `This project now lives in the folder "${dir.name}". Changes save there as you work.`)
+  store.showSaveNotice(t(M.saved), t(M.folder, { name: dir.name }))
   return null
 }
 

@@ -49,7 +49,7 @@ describe('parseCache', () => {
 })
 
 /** The module and core/i18n are singletons, so each run gets fresh copies under a stubbed browser. */
-async function boot(opts: { languages: string[]; stored?: Record<string, string>; translator?: (s: string) => string }) {
+async function boot(opts: { languages: string[]; desktop?: boolean; stored?: Record<string, string>; translator?: (s: string) => string }) {
   vi.resetModules()
   const store = new Map(Object.entries(opts.stored ?? {}))
   vi.stubGlobal('localStorage', {
@@ -58,6 +58,7 @@ async function boot(opts: { languages: string[]; stored?: Record<string, string>
     removeItem: (k: string) => void store.delete(k),
   })
   vi.stubGlobal('navigator', { languages: opts.languages, language: opts.languages[0] })
+  if (opts.desktop) vi.stubGlobal('window', { oipMenu: {} })
   const sent: string[] = []
   if (opts.translator) {
     const fn = opts.translator
@@ -79,10 +80,35 @@ async function boot(opts: { languages: string[]; stored?: Record<string, string>
 afterEach(() => vi.unstubAllGlobals())
 
 describe('the bridge', () => {
+  it('loads bundled Simplified Chinese on desktop, including late messages, without a translator', async () => {
+    const { i18n, bridge } = await boot({ languages: ['en-US'], desktop: true })
+    expect(bridge.languagePref()).toBe('zh-CN')
+    await bridge.initLanguage()
+    const id = i18n.defineMessage('command.sim.run.label', 'Run')
+    expect(i18n.activeLocale()).toBe('zh-CN')
+    expect(i18n.t(id)).toBe('运行')
+  })
+
+  it('honors the saved desktop choice and preserves an explicit automatic preference', async () => {
+    const { i18n, bridge, store } = await boot({ languages: ['zh-CN'], desktop: true, stored: { 'oip-web/language': 'en' } })
+    await bridge.initLanguage()
+    expect(i18n.activeLocale()).toBe('en')
+    bridge.setLanguagePref('auto')
+    expect(bridge.languagePref()).toBe('auto')
+    expect(store.get('oip-web/language')).toBe('auto')
+  })
+
+  it('uses the bundled translation in a Simplified Chinese browser too', async () => {
+    const { i18n, bridge } = await boot({ languages: ['zh-CN'] })
+    await bridge.initLanguage()
+    const id = i18n.defineMessage('toolbar.waitingFor', 'Waiting for {name} to run')
+    expect(i18n.t(id, { name: 'Conv1' })).toBe('等待Conv1开始仿真')
+  })
+
   it("installs the translator's output for messages declared before and after boot", async () => {
     const { i18n, bridge, sent } = await boot({ languages: ['de'], translator: (s) => `[de] ${s}` })
     const early = i18n.defineMessage('t.early', 'Rename {name}')
-    bridge.initLanguage()
+    await bridge.initLanguage()
     const late = i18n.defineMessage('t.late', 'Delete')
     await vi.waitFor(() => expect(i18n.t(late)).toBe('[de] Delete'))
     expect(i18n.t(early, { name: 'Conv1' })).toBe('[de] Rename Conv1')
@@ -93,7 +119,7 @@ describe('the bridge', () => {
   it('keeps line breaks, which a real translator drops', async () => {
     const { i18n, bridge } = await boot({ languages: ['de'], translator: (s) => `[de] ${s.replace(/\n/g, ' ')}` })
     const id = i18n.defineMessage('t.lines', "Couldn't copy the room:\n{error}")
-    bridge.initLanguage()
+    await bridge.initLanguage()
     await vi.waitFor(() => expect(i18n.t(id, { error: 'x' })).toBe("[de] Couldn't copy the room:\n[de] x"))
   })
 
@@ -101,7 +127,7 @@ describe('the bridge', () => {
     const { i18n, bridge } = await boot({ languages: ['de'], translator: () => 'kaputt' })
     const id = i18n.defineMessage('t.ph', 'Open {file}')
     const other = i18n.defineMessage('t.plain', 'Close')
-    bridge.initLanguage()
+    await bridge.initLanguage()
     await vi.waitFor(() => expect(i18n.t(other)).toBe('kaputt'))
     expect(i18n.t(id, { file: 'a.st' })).toBe('Open a.st')
   })
@@ -111,7 +137,7 @@ describe('the bridge', () => {
     const { i18n, bridge } = await boot({ languages: ['fr'], stored })
     const c = i18n.defineMessage('t.c', 'Save')
     const d = i18n.defineMessage('t.d', 'New text')
-    bridge.initLanguage()
+    await bridge.initLanguage()
     expect(i18n.t(c)).toBe('Enregistrer')
     expect(i18n.t(d)).toBe('New text')
   })
@@ -119,7 +145,7 @@ describe('the bridge', () => {
   it('does nothing when the person chose English', async () => {
     const { i18n, bridge, sent } = await boot({ languages: ['de'], stored: { 'oip-web/language': 'en' }, translator: (s) => `[de] ${s}` })
     const id = i18n.defineMessage('t.en', 'Run')
-    bridge.initLanguage()
+    await bridge.initLanguage()
     expect(i18n.activeLocale()).toBe('en')
     expect(i18n.t(id)).toBe('Run')
     expect(sent).toEqual([])
@@ -133,7 +159,7 @@ describe('the bridge', () => {
       create: async ({ targetLanguage }: { targetLanguage: string }) => ({ translate: async (s: string) => `[${targetLanguage}] ${s}` }),
     })
     const id = i18n.defineMessage('t.base', 'Stop')
-    bridge.initLanguage()
+    await bridge.initLanguage()
     await vi.waitFor(() => expect(i18n.t(id)).toBe('[de] Stop'))
     expect(asked).toEqual(['de-AT', 'de'])
     // the locale stays the browser's own tag, for plural rules and the page's lang
@@ -151,7 +177,7 @@ describe('the bridge', () => {
     const { i18n, bridge, store } = await boot({ languages: ['ja'] })
     vi.stubGlobal('Translator', { availability: async () => 'downloadable', create: async () => ({ translate: async (s: string) => s }) })
     i18n.defineMessage('t.ask', 'Run')
-    bridge.initLanguage()
+    await bridge.initLanguage()
     await vi.waitFor(() => expect(bridge.translateStatus().kind).toBe('ask'))
     bridge.declineTranslation()
     expect(store.get('oip-web/language')).toBe('en')

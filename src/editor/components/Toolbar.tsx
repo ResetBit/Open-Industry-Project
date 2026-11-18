@@ -21,10 +21,8 @@ import { focusFirstMenuItem, fromKeyboard, menuKeys, useDismiss } from './popove
 import {
   ChevronIcon,
   DistractionFreeIcon,
-  ExternalLinkIcon,
   EyeIcon,
   DisplayIcon,
-  GitHubIcon,
   HelpIcon,
   OverflowIcon,
   PauseIcon,
@@ -129,12 +127,11 @@ const M = defineMessages('toolbar', {
   distractionFreeTitle: '{label}: Shift+Click also toggles browser fullscreen',
   distractionFree: 'Distraction Free Mode',
   settings: 'Settings',
-  helpTitle: 'Help: keyboard shortcuts, the tutorial, and the project on GitHub',
+  helpTitle: 'Help: keyboard shortcuts and the tutorial',
   help: 'Help',
   tutorialTitle: 'Opens in a project of its own. The one you are in is kept',
   openDesktopRoom: 'Opens this shared project in the desktop app',
   openDesktopCopy: 'Opens a copy of this project in the desktop app; this browser keeps its own',
-  github: 'Open Industry Project on GitHub',
 })
 
 /** a command's label, through the seam (commands.ts) */
@@ -157,8 +154,6 @@ function withCommandKey(label: string, id: string): string {
   const chord = cmd ? commandChord(cmd) : ''
   return chord ? t(M.withChord, { label, chord }) : label
 }
-
-const GITHUB_URL = 'https://github.com/Open-Industry-Project/Open-Industry-Project'
 
 interface ToolbarProps {
   store: EditorStore
@@ -195,9 +190,7 @@ export function Toolbar({ store, state, controller }: ToolbarProps) {
   const menuRef = useRef<HTMLDivElement>(null)
   const menuButtonRef = useRef<HTMLButtonElement>(null)
   const menuListRef = useRef<HTMLDivElement>(null)
-  // Help: the keyboard reference, the tour and the project's home, behind one button. They were three
-  // icon buttons in the same chrome as the mode toggles beside them, so the link that LEAVES the app
-  // looked exactly like one more toggle, and together they cost the row ~80px it measurably lacks.
+  // Keep the keyboard reference and tutorial together behind one help button.
   const [helpOpen, setHelpOpen] = useState(false)
   const helpRef = useRef<HTMLDivElement>(null)
   const helpButtonRef = useRef<HTMLButtonElement>(null)
@@ -339,7 +332,7 @@ export function Toolbar({ store, state, controller }: ToolbarProps) {
   return (
     <div className="toolbar">
       <div className="toolbar-left">
-        {/* The mark alone, no wordmark: the tab already names the app ("<project> - Open Industry Project",
+        {/* The mark alone, no wordmark: the tab already names the app ("<project> - <product>",
             App.tsx), and a bold app name beside the bold project name read as two titles competing for the
             corner. Narrow windows, phones and the desktop shell never had the wordmark either, so this
             makes every surface match. The desktop shell hid the OS title bar to win back a row, so there
@@ -662,8 +655,8 @@ export function Toolbar({ store, state, controller }: ToolbarProps) {
         </button>
         {/* Help. The tour's "shortcuts" step points HERE (data-tutorial), since this is where the
             reference now lives. Hidden on the mobile layout (CSS) with the other icon buttons: the tour
-            is desktop-only, and a phone has no keyboard to look up. Every entry but the GitHub link is a
-            command, so the enablement is the registry's, same as the native menus and the palette. */}
+            is desktop-only, and a phone has no keyboard to look up. The entries share the registry's
+            enablement with native menus and the command palette. */}
         <div className="help-wrap" ref={helpRef}>
           <button
             ref={helpButtonRef}
@@ -736,21 +729,6 @@ export function Toolbar({ store, state, controller }: ToolbarProps) {
                   <span className="help-item-label">{getCommand('help.openInDesktop')?.label}</span>
                 </button>
               )}
-              <div className="help-sep" role="separator" />
-              {/* Names a destination, not a surface: this row renders in the desktop app too, where "the
-                  desktop version" read as a link to the thing you are already running. */}
-              <a
-                className="help-item"
-                role="menuitem"
-                href={GITHUB_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={closeHelp}
-              >
-                <GitHubIcon />
-                <span className="help-item-label">{t(M.github)}</span>
-                <ExternalLinkIcon />
-              </a>
             </div>
           )}
         </div>

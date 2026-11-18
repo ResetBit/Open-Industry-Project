@@ -1735,6 +1735,12 @@ export class RenderView implements IRenderView, IRenderViewTestSurface {
     this.renderer.domElement.dispatchEvent(new PointerEvent(e.type, e))
   }
 
+  async captureVisionFrame(settings: import('../api').VisionCameraSettings): Promise<import('../api').VisionFrame> {
+    const { captureVisionFrame } = await import('./visionCapture')
+    if (this.disposed) throw new Error('The simulation view has closed.')
+    return captureVisionFrame(this.renderer, this.scene, settings)
+  }
+
   cameraPose(): { px: number; py: number; pz: number; tx: number; ty: number; tz: number } {
     const p = this.camera.position
     const t = this.controls.target

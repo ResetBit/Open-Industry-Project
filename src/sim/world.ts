@@ -73,6 +73,7 @@ import { RigDriver } from './rigDriver'
 import { SensorRegistry } from './sensorRegistry'
 import { LoadCells } from './loadCells'
 import { cargoContacts } from './cargoContacts'
+import { inspectPartInterference, type PartInterference } from './partInterference'
 import { behaviorRecord, marksOf, partPackageRev, partSignature } from './worldTypes'
 import type { BehaviorRecord, BodyHolder, JoltModule, KinematicScratch, LiveBox, PartGroup, RigBody, StepClock, UnitLoad } from './worldTypes'
 
@@ -1286,6 +1287,17 @@ export class SimWorld implements SimCore<BoxFrame> {
    *  none. The frame carries marks only for authored parts, and a test's `marked` filter reads spawned cargo too */
   cargoMarks(): (Readonly<Record<string, number | boolean | string>> | null)[] {
     return this.boxes.map((b) => marksOf(b))
+  }
+
+  partInterference(first: string, second: string): { result: PartInterference; jobRows: Record<string, number> } {
+    const a = this.bodies.groups.get(first)
+    const b = this.bodies.groups.get(second)
+    const jobRows: Record<string, number> = Object.create(null)
+    for (const [id, group] of [[first, a], [second, b]] as const) {
+      const row = group?.behaviors?.find((behavior) => typeof behavior.values?.jobs === 'number')?.values?.jobs
+      if (typeof row === 'number') jobRows[id] = row
+    }
+    return { result: inspectPartInterference(this.J, this.system, a, b), jobRows }
   }
 
   /** What each cargo body touches, by frame id (cargoContacts.ts). For a test run's snapshots only: it runs a

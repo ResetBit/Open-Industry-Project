@@ -15,6 +15,13 @@
 // Travels beside the program in the project document, the folder manifest, the scene file and a collab room
 // (`meta.stDialect`).
 
+import { defineMessages, t } from './i18n'
+
+const M = defineMessages('plcDialect', {
+  refusal: "This program is written for the '{dialect}' dialect, which this version of the app cannot run. It is kept unchanged - open it in a version that has that dialect.",
+  note: "Written for the '{dialect}' dialect, which this version cannot edit or run",
+})
+
 /** Can this build run a program in dialect `d`? Only IEC, which is what an absent field (or an explicit "iec") is. */
 export function isKnownDialect(d: string | undefined): d is 'iec' | undefined {
   return d === undefined || d === 'iec'
@@ -31,12 +38,12 @@ export function storedDialect(d: string | null | undefined): string | undefined 
 
 /** Why a program in dialect `d` does not run here. One message for the editor, the Problems dock and the CLIs. */
 export function dialectRefusal(d: string): string {
-  return `This program is written for the '${d}' dialect, which this version of the app cannot run. It is kept unchanged - open it in a version that has that dialect.`
+  return t(M.refusal, { dialect: d })
 }
 
 /** The same refusal in a few words, for the tooltip of a control it disables (the PLC panel's, for one). */
 export function foreignDialectNote(d: string): string {
-  return `Written for the '${d}' dialect, which this version cannot edit or run`
+  return t(M.note, { dialect: d })
 }
 
 /**

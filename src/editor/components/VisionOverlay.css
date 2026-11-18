@@ -1,0 +1,66 @@
+.vision-dialog {
+  width: min(660px, 100%);
+}
+
+.vision-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
+  gap: 8px 12px;
+  margin-block: 12px;
+}
+
+.vision-fields fieldset {
+  grid-column: 1 / -1;
+  min-inline-size: 0;
+  border: 1px solid var(--panel-edge);
+}
+
+.vision-axes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.vision-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vision-fields input,
+.vision-fields select {
+  min-inline-size: 0;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 4px;
+  padding: 4px;
+}
+
+.vision-dialog canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-block-start: 12px;
+  border: 1px solid var(--panel-edge);
+}
+
+.vision-result {
+  margin-block: 8px 0;
+}
+
+.vision-plc {
+  margin-block-start: 12px;
+  border-top: 1px solid var(--panel-edge);
+  padding-block-start: 4px;
+}
+
+.vision-dialog > .vision-fields,
+.vision-dialog form > .vision-fields {
+  border: 0;
+  padding: 0;
+}
+
+.vision-fields input[type=checkbox] {
+  align-self: start;
+}

@@ -1,11 +1,14 @@
+import { useSyncExternalStore } from 'react'
+import { keymapRev, subscribeKeymap } from '../../core/keymap'
+import { withKeys } from '../keyHint'
 import { defineMessages, t } from '../../core/i18n'
 import type { EditorState, EditorStore } from '../store/store'
 
 const M = defineMessages('guardOpenings', {
-  hintSelected: 'Opening selected: Delete removes it, or drag inside it to slide it.',
+  hintSelected: 'Opening selected: {key:edit.delete} removes it, or drag inside it to slide it.',
   hint: 'Drag along a guard to cut an opening. Drag a dot to resize one, drag inside it to slide it, click it to select.',
   title: 'Guard openings',
-  doneTitle: 'Leave guard-openings mode (Esc or G)',
+  doneTitle: 'Leave guard-openings mode ({key:ui.cancel} or {key:edit.sideGuards})',
   done: 'Done',
 })
 
@@ -21,15 +24,16 @@ interface GuardOpeningsBannerProps {
  * ends by itself when the selection leaves the conveyor.
  */
 export function GuardOpeningsBanner({ store, state }: GuardOpeningsBannerProps) {
+  useSyncExternalStore(subscribeKeymap, keymapRev)
   if (!state.sideGuardMode) return null
   const hint = state.selectedGuardOpening
-    ? t(M.hintSelected)
+    ? withKeys(t(M.hintSelected))
     : t(M.hint)
   return (
     <div className="guard-openings-banner" role="status" data-testid="guard-openings-banner">
       <span className="guard-openings-title">{t(M.title)}</span>
       <span className="guard-openings-hint">{hint}</span>
-      <button type="button" className="guard-openings-done" title={t(M.doneTitle)} onClick={() => store.setSideGuardMode(false)}>
+      <button type="button" className="guard-openings-done" title={withKeys(t(M.doneTitle))} onClick={() => store.setSideGuardMode(false)}>
         {t(M.done)}
       </button>
     </div>

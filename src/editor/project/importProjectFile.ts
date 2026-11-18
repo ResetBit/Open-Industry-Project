@@ -7,6 +7,12 @@ import { importProjectData } from './projectFile'
 import { importSceneText, isSceneFileText } from './sceneFile'
 import type { EditorController } from '../controller'
 import type { EditorStore } from '../store/store'
+import { defineMessages, t } from '../../core/i18n'
+
+const M = defineMessages('projectFileImport', {
+  keep: "Import “{file}”? It opens as a new project - the one you have open now is kept under Projects.",
+  replace: "Import “{file}”? It replaces the current project. Export first to keep it.",
+})
 
 /** Import `bytes` (a file named `fileName`) as a project; asks before replacing anything and says what went wrong. */
 export async function importProjectFile(store: EditorStore, controller: EditorController | null, bytes: Uint8Array, fileName: string): Promise<void> {
@@ -22,9 +28,7 @@ export async function importProjectFile(store: EditorStore, controller: EditorCo
   // With a library the import is an addition: it opens as its own document and the project you are in keeps its row
   // (projectFile.forgetCurrentDocument). Without one (no IndexedDB, so no library) the import replaces the current
   // project, so the prompt has to say which of the two will happen.
-  const ask = supportsDocumentLibrary()
-    ? `Import “${fileName}”? It opens as a new project - the one you have open now is kept under Projects.`
-    : `Import “${fileName}”? It replaces the current project. Export first to keep it.`
+  const ask = t(supportsDocumentLibrary() ? M.keep : M.replace, { file: fileName })
   if (!confirm(ask)) return
   // zipped-folder or legacy JSON .oip, sniffed by content; success reloads into the import. The project being left is
   // filed first, once the file has validated, so "kept under Projects" is a fact.

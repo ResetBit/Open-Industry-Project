@@ -331,3 +331,26 @@
 .plc-conn-where {
   margin-left: 8px;
 }
+
+.plc-conn-locate {
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.plc-conn-signal {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: 3px;
+  margin-inline-start: 8px;
+  background: var(--line);
+}
+
+.plc-conn-signal.is-on {
+  color: light-dark(#1e652d, #9ce9aa);
+  background: light-dark(#e2f5e7, #1d4427);
+}
+
+.plc-conn-signal.is-unavailable {
+  color: light-dark(#734d09, #ffd282);
+  background: light-dark(#fff0ce, #4f380e);
+}

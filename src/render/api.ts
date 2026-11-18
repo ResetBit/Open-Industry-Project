@@ -4,6 +4,23 @@ import type { PartInstance, SceneJSON } from '../core/types'
 import type { DisplayUnits } from '../core/units'
 import type { SubPose } from '../core/rig/rigPose'
 
+export interface VisionCameraSettings {
+  position: readonly [number, number, number]
+  target: readonly [number, number, number]
+  fov: number
+  width: number
+  height: number
+  lightIntensity: number
+}
+
+export interface VisionFrame {
+  width: number
+  height: number
+  rgba: Uint8ClampedArray
+  /** Project a top-left-origin pixel onto a horizontal plane at world Y in metres. */
+  projectToPlane(x: number, y: number, planeY: number): { x: number; z: number } | null
+}
+
 export interface RenderStats {
   drawCalls: number
   /**
@@ -571,6 +588,8 @@ export interface IRenderView {
   isNavigating(): boolean
 
   /** current camera position + orbit target, for detecting whether the view has moved */
+  /** Capture the rendered work cell independently of the editor camera. */
+  captureVisionFrame?(settings: VisionCameraSettings): Promise<VisionFrame>
   cameraPose(): { px: number; py: number; pz: number; tx: number; ty: number; tz: number }
   /**
    * The camera position + a point it really looks at: the orbit target, or, in pilot mode or a freelook flight (which

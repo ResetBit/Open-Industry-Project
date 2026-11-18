@@ -1,4 +1,4 @@
-# Open Industry Project desktop app
+# VirtualSimulation desktop app
 
 The desktop app is the same editor in an Electron window, with native folder access, PLC connections and
 automatic updates. It ships for Windows (a signed installer) and Linux (a `.deb` and an AppImage).
@@ -30,7 +30,7 @@ To run the production build the way an installed app does, run `npm run build` i
 npm run build
 # this folder:
 npm run pack      # release/win-unpacked/, to try it without installing
-npm run dist      # release/Open-Industry-Project-Setup-<version>.exe
+npm run dist      # release/VirtualSimulation-Setup-<version>.exe
 ```
 
 The electron-builder config is the `build` field of [package.json](package.json). For an installer to hand

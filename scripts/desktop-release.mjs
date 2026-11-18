@@ -66,6 +66,7 @@ const prebuilt = process.argv.includes('--prebuilt')
 const publishOnly = process.argv.includes('--publish')
 const printVersion = process.argv.includes('--print-version')
 const publisherName = pkg.build.win.signtoolOptions?.publisherName ?? null
+const productName = pkg.productName
 const STABLE = 'Open-Industry-Project-Setup.exe'
 // the Linux download links' names; the versioned ones are package.json `appImage` / `deb` artifactName
 const STABLE_APPIMAGE = 'Open-Industry-Project.AppImage'
@@ -175,7 +176,7 @@ if (printVersion) {
   process.exit(0)
 }
 const out = resolve(process.env.OIP_RELEASE_DIR || join(tmpdir(), `oip-desktop-release-${version}`))
-const installer = `Open-Industry-Project-Setup-${version}.exe`
+const installer = `${productName}-Setup-${version}.exe`
 
 if (publishOnly) await publish()
 
@@ -200,7 +201,7 @@ if (prebuilt) {
 if (linux) await releaseLinux()
 
 step('5. verify')
-const files = { installer: join(out, installer), app: join(out, 'win-unpacked', 'Open Industry Project.exe'), blockmap: join(out, `${installer}.blockmap`), latest: join(out, 'latest.yml') }
+const files = { installer: join(out, installer), app: join(out, 'win-unpacked', `${productName}.exe`), blockmap: join(out, `${installer}.blockmap`), latest: join(out, 'latest.yml') }
 for (const [k, f] of Object.entries(files)) if (!existsSync(f)) fail(`${k} missing: ${f}`)
 for (const f of [files.installer, files.app]) {
   const who = verifySigned(f)
@@ -231,8 +232,8 @@ console.log(`\ndesktop release: ${version} is live. Download link: ${FEED}/${STA
 // Steps 5-7 for --linux. Nothing to sign; what stands in for the signature check is LAUNCHING the package.
 async function releaseLinux() {
   step('5. verify (Linux)')
-  const appImage = `Open-Industry-Project-${version}.AppImage`
-  const deb = `open-industry-project_${version}_amd64.deb`
+  const appImage = `${productName}-${version}.AppImage`
+  const deb = `${productName}_${version}_amd64.deb`
   const files = { appImage: join(out, appImage), deb: join(out, deb), latest: join(out, 'latest-linux.yml') }
   for (const [k, f] of Object.entries(files)) if (!existsSync(f)) fail(`${k} missing: ${f}`)
   const latest = readFileSync(files.latest, 'utf8')
@@ -294,8 +295,8 @@ async function publish() {
       name: 'Linux',
       feed: 'latest-linux.yml',
       files: [
-        { name: `Open-Industry-Project-${version}.AppImage`, type: 'application/vnd.appimage', stable: STABLE_APPIMAGE },
-        { name: `open-industry-project_${version}_amd64.deb`, type: 'application/vnd.debian.binary-package', stable: STABLE_DEB },
+        { name: `${productName}-${version}.AppImage`, type: 'application/vnd.appimage', stable: STABLE_APPIMAGE },
+        { name: `${productName}_${version}_amd64.deb`, type: 'application/vnd.debian.binary-package', stable: STABLE_DEB },
       ],
     },
   ].filter((p) => existsSync(join(out, p.feed)))

@@ -277,6 +277,13 @@ async function handle(msg: MainToWorker): Promise<void> {
       } else {
         post({ type: 'cargoDetail', seq: msg.seq, simTime: 0, ids: new Uint32Array(0), velocities: new Float32Array(0), touching: [] })
       }
+    } else if (msg.type === 'inspectPartInterference') {
+      post({
+        type: 'partInterference',
+        seq: msg.seq,
+        simTime: world ? world.stepCount / world.hz : 0,
+        ...(world?.partInterference(msg.first, msg.second) ?? { result: { kind: 'unavailable' as const } }),
+      })
     } else if (msg.type === 'setTimeScale') {
       // applied live by the running loop on its next tick
       timeScale = msg.scale

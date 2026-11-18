@@ -4,6 +4,7 @@ import { getLoadStage, signalCoverHidden, subscribeLoadStage, whenScenePainted }
 import type { LoadStage } from '../../render/renderReady'
 import { isSceneSwapCovered, subscribeSceneSwapCover } from '../sceneSwapCover'
 import { defineMessages, t } from '../../core/i18n'
+import { PRODUCT_NAME } from '../productBrand'
 
 const M = defineMessages('loadingCover', {
   boot: 'Loading…',
@@ -131,7 +132,7 @@ export function ViewportLoadingCover() {
       aria-hidden={!covered}
     >
       {/* i18n-ok: the product's name */}
-      <img className="viewport-cover-logo" src="/oip-logo.svg" alt="Open Industry Project" />
+      <img className="viewport-cover-logo" src="/oip-logo.svg" alt={PRODUCT_NAME} />
       <div className="viewport-cover-status">
         {ready && swapping ? (
           t(M.scene)

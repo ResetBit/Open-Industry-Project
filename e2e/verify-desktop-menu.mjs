@@ -45,17 +45,23 @@ const readMenu = (app) =>
   })
 
 const { url, vite } = await startServer()
+const profileDir = mkdtempSync(join(tmpdir(), 'oip-menu-'))
 let app
 try {
   const env = { ...process.env, DESKTOP_URL: url }
   delete env.ELECTRON_RUN_AS_NODE // else Electron runs main.cjs as plain Node (see docs/desktop-shell.md)
   app = await _electron.launch({
     executablePath: electronPath,
-    args: [desktopDir, `--user-data-dir=${mkdtempSync(join(tmpdir(), 'oip-menu-'))}`],
+    args: [desktopDir, `--user-data-dir=${profileDir}`],
     env,
   })
   const page = await app.firstWindow()
   await page.waitForSelector('.toolbar', { timeout: 60000 })
+  await page.evaluate(() => localStorage.setItem('oip-web/language', 'en'))
+  await page.reload()
+  await page.waitForSelector('.toolbar', { timeout: 60000 })
+  check('the desktop app uses the product name', await app.evaluate(({ app }) => app.getName()) === 'VirtualSimulation')
+  check('the temporary profile is honored', await app.evaluate(({ app }) => app.getPath('userData')) === profileDir)
 
   // main boots with a shell-only bootstrap menu and swaps in the real one when the model lands, so
   // wait for a command item rather than asserting against whichever menu happens to be up
@@ -86,7 +92,7 @@ try {
   // ── 2. main's own items survived the handover ───────────────────────────────────────────────────
   // importing a folder of parts is the Parts panel's Import part, one way in, not a second item here
   check('the File menu has no separate parts import', !labels('File').some((l) => /Import Parts/.test(l)), labels('File').join(' · '))
-  check('the Help links are still there', labels('Help').includes('Documentation') && labels('Help').includes('View on GitHub'), labels('Help').join(' · '))
+  check('the Help menu keeps updates and drops upstream links and the license viewer', labels('Help').includes('Check for Updates…') && !['Documentation', 'View on GitHub', 'Report an Issue…', 'Third-Party Licenses'].some((l) => labels('Help').includes(l)), labels('Help').join(' · '))
 
   // ── 3. enablement tracks the editor ─────────────────────────────────────────────────────────────
   // main alone cannot see a selection, so a menu built once there would leave Cut clickable forever.

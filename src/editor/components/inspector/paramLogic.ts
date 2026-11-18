@@ -6,6 +6,20 @@ import { isRealBound, partParamSpecs } from '../../../core/packageParams'
 import { locatedVariables } from '../../../plc/locatedIndex'
 import { METRIC_DISPLAY, unitView, type DisplayUnits } from '../../../core/units'
 import type { BuildingWallRule, NumberParamSpec, ParamSpec, ParamValue, PartInstance } from '../../../core/types'
+import { defineMessages, t } from '../../../core/i18n'
+
+const M = defineMessages('inspector.paramTooltip', {
+  on: 'On',
+  off: 'Off',
+  none: '(none)',
+  empty: '(empty)',
+  unbound: '(unbound)',
+  range: 'Range: {min} – {max}{unit}',
+  min: 'Min: {min}{unit}',
+  max: 'Max: {max}{unit}',
+  codes: 'Codes: {codes}',
+  default: 'Default: {value}',
+})
 
 export function isArrayKind(k: ParamSpec['kind']): boolean {
   return k === 'wallRules' || k === 'numberList'
@@ -51,18 +65,18 @@ function formatParamDefault(spec: ParamSpec, system: DisplayUnits): string {
     case 'number':
       return formatQuantity(spec, spec.default, system)
     case 'boolean':
-      return spec.default ? 'On' : 'Off'
+      return t(spec.default ? M.on : M.off)
     case 'enum':
       return spec.options.find((o) => o.value === spec.default)?.label ?? String(spec.default)
     case 'color':
-      if (spec.list) return spec.default ? spec.default.toUpperCase().split(',').join(', ') : '(none)'
+      if (spec.list) return spec.default ? spec.default.toUpperCase().split(',').join(', ') : t(M.none)
       return spec.default.toUpperCase()
     case 'text':
-      return spec.default ? spec.default : '(empty)'
+      return spec.default ? spec.default : t(M.empty)
     case 'partRef':
-      return spec.default ? spec.default : '(none)'
+      return spec.default ? spec.default : t(M.none)
     case 'tagRef':
-      return spec.default ? spec.default : '(unbound)'
+      return spec.default ? spec.default : t(M.unbound)
     default:
       return '' // tables have no single-line default
   }
@@ -86,14 +100,14 @@ export function buildParamTooltip(spec: ParamSpec, label: string, desc: string |
     // a bound the schema left out arrives as ±1e6 (packageParams): not a range to advertise
     const lo = isRealBound(spec.min)
     const hi = isRealBound(spec.max)
-    if (lo && hi) meta.push(`Range: ${n(spec.min)} – ${n(spec.max)}${u}`)
-    else if (lo) meta.push(`Min: ${n(spec.min)}${u}`)
-    else if (hi) meta.push(`Max: ${n(spec.max)}${u}`)
+    if (lo && hi) meta.push(t(M.range, { min: n(spec.min), max: n(spec.max), unit: u }))
+    else if (lo) meta.push(t(M.min, { min: n(spec.min), unit: u }))
+    else if (hi) meta.push(t(M.max, { max: n(spec.max), unit: u }))
   }
   // a CODE tag's declared meanings (ParamSpec.values)
-  if (spec.kind === 'tagRef' && spec.values?.length) meta.push(`Codes: ${spec.values.map((v) => `${v.value} = ${v.label}`).join(', ')}`)
+  if (spec.kind === 'tagRef' && spec.values?.length) meta.push(t(M.codes, { codes: spec.values.map((v) => `${v.value} = ${v.label}`).join(', ') }))
   const def = formatParamDefault(spec, system)
-  if (def) meta.push(`Default: ${def}`)
+  if (def) meta.push(t(M.default, { value: def }))
   if (meta.length) lines.push('', ...meta)
   return lines.join('\n')
 }

@@ -20,7 +20,7 @@
  * KeyboardEvent satisfies structurally.
  */
 
-import { defineMessage, t, type MessageId } from './i18n'
+import { defineMessage, defineMessages, t, type MessageId } from './i18n'
 
 /** the modal context a binding belongs to. Chords only conflict within a mode (W is both the
  *  Move tool and fly-forward, which is fine: the modes are never live at the same time) */
@@ -513,25 +513,31 @@ export function findKeymapConflicts(keymap: readonly KeyBinding[] = DEFAULT_KEYM
   return clashes
 }
 
-const TOKEN_LABEL: Record<string, string> = {
+const KEY_NAMES = defineMessages('keyToken', {
   Space: 'Space',
+  Escape: 'Esc',
+  Delete: 'Del',
+  Backspace: 'Backspace',
+  Enter: 'Enter',
+  Tab: 'Tab',
+  Insert: 'Insert',
+  Home: 'Home',
+  End: 'End',
+  PageDown: 'Page Down',
+  PageUp: 'Page Up',
+})
+const NUMPAD_DIGIT = defineMessage('keyToken.numpadDigit', 'Numpad {digit}')
+
+const TOKEN_LABEL: Record<string, string> = {
   Period: '.',
   Comma: ',',
   Slash: '/',
   Minus: '-',
   Equal: '=',
-  Escape: 'Esc',
-  Delete: 'Del',
-  PageDown: 'Page Down',
-  PageUp: 'Page Up',
   ArrowUp: '↑',
   ArrowDown: '↓',
   ArrowLeft: '←',
   ArrowRight: '→',
-  Numpad1: 'Numpad 1',
-  Numpad3: 'Numpad 3',
-  Numpad5: 'Numpad 5',
-  Numpad7: 'Numpad 7',
 }
 
 /** the chord as a human reads it: `ctrl+shift+KeyZ` → `Ctrl+Shift+Z` (`⌘⇧Z` on a Mac) */
@@ -542,7 +548,9 @@ export function formatChord(chord: string, mac = false): string {
   if (c.meta) out.push(mac ? '⌘' : 'Meta')
   if (c.alt) out.push(mac ? '⌥' : 'Alt')
   if (c.shift) out.push(mac ? '⇧' : 'Shift')
-  out.push(TOKEN_LABEL[c.token] ?? c.token.replace(/^(Key|Digit)/, ''))
+  const key = Object.hasOwn(KEY_NAMES, c.token) ? KEY_NAMES[c.token as keyof typeof KEY_NAMES] : undefined
+  const numpad = /^Numpad(\d)$/.exec(c.token)
+  out.push(key ? t(key) : numpad ? t(NUMPAD_DIGIT, { digit: numpad[1]! }) : (TOKEN_LABEL[c.token] ?? c.token.replace(/^(Key|Digit)/, '')))
   return out.join(mac ? '' : '+')
 }
 

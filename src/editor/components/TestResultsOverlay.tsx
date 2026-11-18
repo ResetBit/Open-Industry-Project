@@ -5,6 +5,9 @@ import { runProjectTests } from '../project/projectTestsRun'
 import type { ProjectTestRun } from '../project/projectTestsRun'
 import type { TestFactsView } from '../project/testFacts'
 import { CloseIcon } from './toolbarIcons'
+import { currentDocumentId } from '../project/documentStore'
+import { downloadTrainingRun, saveTrainingRun } from '../training/records'
+import type { TestTrainingRun } from '../training/records'
 import { defineMessages, t } from '../../core/i18n'
 
 const M = defineMessages('testResults', {
@@ -22,6 +25,9 @@ const M = defineMessages('testResults', {
   beforeFailureNone: 'Physical facts before the failure ({until}): none',
   beforeFailure: 'Physical facts before the failure ({until}): {count}',
   earlier: '... {count} earlier',
+  download: 'Download training report',
+  archived: 'Training report saved on this computer.',
+  archiveFailed: 'Could not archive the training report. Download a copy to keep it.',
 })
 
 /**
@@ -40,6 +46,8 @@ export function TestResultsOverlay({ project, onClose }: TestResultsOverlayProps
   const [runs, setRuns] = useState<ProjectTestRun[]>([])
   const [done, setDone] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [report, setReport] = useState<TestTrainingRun | null>(null)
+  const [archiveStatus, setArchiveStatus] = useState<'saved' | 'error' | null>(null)
   const total = project.tests?.length ?? 0
 
   // Capture-phase Esc, like ShortcutsOverlay: the editor controller also listens for Escape, and the
@@ -58,22 +66,40 @@ export function TestResultsOverlay({ project, onClose }: TestResultsOverlayProps
   // One run per mount. The guard is a ref rather than a dep list because StrictMode double-invokes
   // effects in dev, and a second run here would step every scene's physics twice.
   const started = useRef(false)
+  const mounted = useRef(false)
   useEffect(() => {
-    if (started.current) return
-    started.current = true
-    let live = true
-    runProjectTests(project, (run) => {
-      if (live) setRuns((prev) => [...prev, run])
-    })
-      .then(() => live && setDone(true))
-      .catch((e: unknown) => {
-        if (!live) return
-        setError(e instanceof Error ? e.message : String(e))
-        setDone(true)
-      })
-    return () => {
-      live = false
+    mounted.current = true
+    if (!started.current) {
+      started.current = true
+      const startedAt = Date.now()
+      const documentId = currentDocumentId() ?? 'working-copy'
+      let student = ''
+      try { student = localStorage.getItem('oip-web/training-student')?.trim() ?? '' } catch { /* optional learner id */ }
+      function archive(results: ProjectTestRun[], failure?: string) {
+        const record: TestTrainingRun = {
+          kind: 'test', documentId, project: project.name, student, startedAt, finishedAt: Date.now(),
+          results: results.map((run) => ({
+            name: run.name, ok: run.ok, checks: run.result?.checks.map(({ ok, detail }) => ({ ok, detail })) ?? [],
+            ...(run.error !== undefined ? { error: run.error } : {}),
+            ...(run.facts ? { flow: run.facts.summary } : {}),
+          })),
+          ...(failure !== undefined ? { error: failure } : {}),
+        }
+        if (mounted.current) {
+          setReport(record)
+          setDone(true)
+          if (failure !== undefined) setError(failure)
+        }
+        void saveTrainingRun(record).then(
+          () => { if (mounted.current) setArchiveStatus('saved') },
+          () => { if (mounted.current) setArchiveStatus('error') },
+        )
+      }
+      void runProjectTests(project, (run) => {
+        if (mounted.current) setRuns((prev) => [...prev, run])
+      }).then((results) => archive(results), (failure: unknown) => archive([], failure instanceof Error ? failure.message : String(failure)))
     }
+    return () => { mounted.current = false }
   }, [project])
 
   const failed = runs.filter((r) => !r.ok).length
@@ -102,6 +128,10 @@ export function TestResultsOverlay({ project, onClose }: TestResultsOverlayProps
           {summary}
         </p>
         {error !== null && <p className="test-run-error">{error}</p>}
+        {report && <div className="training-actions">
+          <button type="button" data-testid="training-test-export" onClick={() => downloadTrainingRun(report)}>{t(M.download)}</button>
+          {archiveStatus && <span role="status">{t(archiveStatus === 'saved' ? M.archived : M.archiveFailed)}</span>}
+        </div>}
         <div className="test-run-list">
           {runs.map((run, i) => (
             <section className="test-run-row" key={`${run.name}-${i}`} data-ok={run.ok}>

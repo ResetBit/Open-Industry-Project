@@ -1,3 +1,4 @@
+const { createDesktopLicense } = require('./desktopLicense.cjs')
 // Main process of the desktop app: loads the oip-web editor in an Electron window and gives it the native
 // surfaces the browser lacks (project folders, the parts shelf, file associations, deep links, the native menu,
 // the agent door). Physics runs in the renderer as WASM, the same as in the browser.
@@ -5,7 +6,6 @@ const { app, BrowserWindow, Menu, dialog, ipcMain: electronIpcMain, nativeTheme,
 const { basename, dirname, join, resolve } = require('node:path')
 const { existsSync, mkdirSync, realpathSync, writeFileSync, readFileSync } = require('node:fs')
 const { spawn } = require('node:child_process')
-const { pathToFileURL } = require('node:url')
 const { listWorkspace } = require('./partsWorkspace.cjs')
 const { listShelf, readChosenShelf, shelfSignature, writeChosenShelf, writeShelfPart } = require('./partsShelf.cjs')
 const { documentFileArg, readDocumentFile } = require('./fileOpen.cjs')
@@ -25,6 +25,7 @@ const { APP_URL, registerScheme, serve: serveDistProtocol } = require('./distPro
 const { distIsBuilt } = require('./pagesHost.cjs')
 const { doorAtStartup, readDoorSetting, writeDoorSetting } = require('./agentDoorSetting.cjs')
 const { setupUpdater } = require('./updater.cjs')
+const { createDesktopLocale, chineseRoles, chineseNetworkAction } = require('./desktopLocale.cjs')
 const { SCHEME: LINK_SCHEME, deepLinkFromArgv, isDeepLinkArg, linkUrl, parseDeepLink, roomOf } = require('./deepLink.cjs')
 
 // The shell keeps NO parts of its own. A project's part definitions are its own copies, stored with the project
@@ -63,6 +64,13 @@ function editorUrl(base) {
   }
 }
 const packaged = app.isPackaged
+// Preserve the existing profile after changing Electron's application name.
+if (!app.commandLine.hasSwitch('user-data-dir')) {
+  const profile = join(app.getPath('appData'), packaged ? 'Open Industry Project' : 'oip-desktop')
+  mkdirSync(profile, { recursive: true })
+  app.setPath('userData', profile)
+  app.setPath('sessionData', profile)
+}
 const devUrl = packaged ? '' : process.env.DESKTOP_URL || ''
 const TARGET_URL = editorUrl(devUrl || 'http://localhost:5173')
 const prodMode = packaged || (process.env.OIP_DESKTOP_PROD === '1' && !devUrl)
@@ -118,6 +126,8 @@ const iconOption = existsSync(APP_ICON) ? { icon: APP_ICON } : {}
 // left it - proper desktop UX for a workspace-heavy editor. Lives next to the custom-parts folder in
 // userData. Absence (first run) means "no memory yet" → we maximize to fill the screen.
 const WINDOW_STATE_FILE = join(app.getPath('userData'), 'window-state.json')
+const desktopLocale = createDesktopLocale(join(app.getPath('userData'), 'desktop-locale.txt'))
+const desktopText = desktopLocale.text
 // Un-maximized fallback size - also the restore size before the user has ever resized the window.
 const DEFAULT_BOUNDS = { width: 1600, height: 1000 }
 
@@ -312,8 +322,6 @@ app.on('web-contents-created', (_event, contents) => {
   })
   // A window never leaves the app: a link that would take it elsewhere opens in the OS browser instead.
   const guardNavigation = (event, url) => {
-    // the licenses window's one link: Chromium's own license page, a local file beside the exe
-    if (licenseContents.has(contents.id) && url === pathToFileURL(chromiumLicensesFile()).href) return
     const verdict = navigateDisposition(url, appOrigin)
     if (verdict === 'allow') return
     event.preventDefault()
@@ -452,7 +460,7 @@ function createWindow(url = TARGET_URL) {
       return win.loadURL(u)
     },
     (err) => {
-      dialog.showErrorBox('Open Industry Project', `Could not serve the built app: ${err.message}`)
+      dialog.showErrorBox(app.name, desktopText(`Could not serve the built app: ${err.message}`, `无法加载内置应用：${err.message}`))
       app.quit()
     },
   )
@@ -473,9 +481,9 @@ const DOC_ID = /^doc-[a-z0-9-]+$/
 // The folder the window that attached last is working in: the dialogs' starting point for a window with no folder.
 let projectRoot = null
 
-/** The windows running the app: not a popped-out panel, whose page is its opener's, nor the licenses page. */
+/** The windows running the full editor. */
 function appWindows() {
-  return BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed() && !popoutOwner.has(w.id) && !licenseContents.has(w.webContents.id))
+  return BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed() && !popoutOwner.has(w.id))
 }
 
 /** The app window focused last, so a request from outside any window (a second launch, an agent) goes to it. */
@@ -651,7 +659,7 @@ function readProjectAt(root) {
 // + validates them through the one codec (src/core/project/projectFolder.ts). The shell stays format-blind.
 async function pickOpenProjectFolder(win) {
   const result = await dialog.showOpenDialog(win, {
-    title: 'Open Project Folder',
+    title: desktopText('Open Project Folder', '打开项目文件夹'),
     defaultPath: rootOf(win) || defaultProjectsRoot(),
     properties: ['openDirectory'],
   })
@@ -665,8 +673,8 @@ async function pickOpenProjectFolder(win) {
 // same guarded path every later save takes, after asking about a project already there.
 async function pickSaveProjectFolder(win) {
   const result = await dialog.showOpenDialog(win, {
-    title: 'Save Project to Folder',
-    buttonLabel: 'Save Here',
+    title: desktopText('Save Project to Folder', '保存项目到文件夹'),
+    buttonLabel: desktopText('Save Here', '保存到此处'),
     defaultPath: rootOf(win) || defaultProjectsRoot(),
     properties: ['openDirectory', 'createDirectory', 'promptToCreate'],
   })
@@ -717,7 +725,7 @@ function openDocumentFile(path) {
 // second home for those parts.
 async function pickWorkspace(win) {
   const result = await dialog.showOpenDialog(win, {
-    title: 'Import Parts from Folder',
+    title: desktopText('Import Parts from Folder', '从文件夹导入部件'),
     properties: ['openDirectory'],
   })
   if (result.canceled || result.filePaths.length === 0) return null
@@ -947,7 +955,7 @@ function registerIpc() {
   ipcMain.handle('shelf:write', (_event, id, manifestJson, behaviorSource, thumbnail) => writeShelfPart(shelfRoot(), id, manifestJson, behaviorSource, thumbnail))
   ipcMain.handle('shelf:pickFolder', async (event) => {
     const result = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), {
-      title: 'Choose Parts Shelf Folder',
+      title: desktopText('Choose Parts Shelf Folder', '选择部件库文件夹'),
       defaultPath: shelfRoot(),
       properties: ['openDirectory', 'createDirectory'],
     })
@@ -964,16 +972,21 @@ function registerIpc() {
   const consent = createEndpointConsent({
     file: join(app.getPath('userData'), 'network-endpoints.json'),
     trustAll: process.env.OIP_TRUST_ENDPOINTS === '1',
-    ask: async ({ what }, sender) => {
+    ask: async ({ key, what }, sender) => {
       const win = sender ? BrowserWindow.fromWebContents(sender) : null
       const options = {
         type: 'warning',
-        title: 'Network connection',
-        message: `Allow Open Industry Project to ${what}?`,
-        detail:
+        title: desktopText('Network connection', '网络连接'),
+        message: desktopText(
+          `Allow ${app.name} to ${what}?`,
+          `允许 ${app.name} ${chineseNetworkAction(key, what)}吗？`,
+        ),
+        detail: desktopText(
           'Allow this only if you set up this connection yourself. A connection to real equipment lets the simulator ' +
-          'read and write it. The app remembers a yes for this address.',
-        buttons: ['Allow', 'Cancel'],
+            'read and write it. The app remembers a yes for this address.',
+          '请仅在此连接由你亲自配置时允许。连接实体设备后，仿真器可以读取和写入设备数据。程序会记住对该地址的许可。',
+        ),
+        buttons: [desktopText('Allow', '允许'), desktopText('Cancel', '取消')],
         defaultId: 1,
         cancelId: 1,
         noLink: true,
@@ -1045,88 +1058,19 @@ function sendCommand(win, command, viaChord = false) {
   if (win && !win.isDestroyed()) win.webContents.send('menu:command', command, viaChord)
 }
 
-// ── Third-party licenses (Help > Third-Party Licenses) ───────────────────────────────────────────────
-// Everything the app redistributes, in one window: the app's own license and THIRD_PARTY_NOTICES.md, the
-// license texts of what the web build bundles (dist/THIRD_PARTY_LICENSES.txt, generated by the build) and of
-// the shell's own main-process dependencies (THIRD_PARTY_LICENSES.desktop.txt, generated before packaging by
-// scripts/desktop-licenses.mjs), and Electron's. Chromium's is a 20 MB page of its own, linked rather than
-// inlined. The window has no preload: it is text, and needs nothing from main.
-const licenseContents = new Set()
-
-function chromiumLicensesFile() {
-  return join(dirname(process.execPath), 'LICENSES.chromium.html')
-}
-
-function licenseSections() {
-  const repo = join(__dirname, '..', '..')
-  const first = (...paths) => paths.find((p) => existsSync(p)) ?? paths[0]
-  const exeDir = dirname(process.execPath)
-  return [
-    ['Open Industry Project', first(join(DIST_DIR, 'LICENSE'), join(repo, 'LICENSE'))],
-    ['Third-party notices', first(join(DIST_DIR, 'THIRD_PARTY_NOTICES.md'), join(repo, 'THIRD_PARTY_NOTICES.md'))],
-    ['Third-party code in the app', join(DIST_DIR, 'THIRD_PARTY_LICENSES.txt')],
-    ['Third-party code in the desktop shell', join(__dirname, 'THIRD_PARTY_LICENSES.desktop.txt')],
-    // electron-builder renames Electron's LICENSE; an unpackaged shell still has the original name
-    ['Electron', first(join(exeDir, 'LICENSE.electron.txt'), join(exeDir, 'LICENSE'))],
-  ]
-}
-
-function showLicenses(parent) {
-  const escape = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  const body = licenseSections()
-    .map(([title, file]) => {
-      let text
-      try {
-        text = readFileSync(file, 'utf8')
-      } catch {
-        text = `(not found: ${file}${packaged ? '' : ' - run `npm run build`, and `npm run pack` in apps/desktop, to generate it'})`
-      }
-      return `<h2>${escape(title)}</h2><pre>${escape(text)}</pre>`
-    })
-    .join('\n')
-  const chromium = existsSync(chromiumLicensesFile())
-    ? `<p><a href="${pathToFileURL(chromiumLicensesFile()).href}">Chromium's licenses</a> (a large page; it opens in this window)</p>`
-    : ''
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Third-Party Licenses</title>
-<style>:root{color-scheme:${shellChoice || 'light dark'}}
-body{background:light-dark(${SHELL.light.bg},${SHELL.dark.bg});color:light-dark(${SHELL.light.text},${SHELL.dark.text});font:13px system-ui,sans-serif;margin:24px;max-width:960px}
-h1{font-size:18px}h2{font-size:15px;margin-top:28px;border-bottom:1px solid light-dark(#d8dadd,#33363b);padding-bottom:4px}
-pre{white-space:pre-wrap;font:12px ui-monospace,Consolas,monospace;color:light-dark(#393c40,#c3c6ca)}a{color:light-dark(#226fce,#7cb7ff)}</style></head>
-<body><h1>Third-Party Licenses</h1><p>Open Industry Project ${escape(app.getVersion())} and the software it includes.</p>${chromium}${body}</body></html>`
-  const file = join(app.getPath('userData'), 'licenses.html')
-  try {
-    writeFileSync(file, html)
-  } catch (e) {
-    dialog.showErrorBox('Third-Party Licenses', `Could not write ${file}: ${e instanceof Error ? e.message : String(e)}`)
-    return
-  }
-  const win = new BrowserWindow({
-    width: 900,
-    height: 760,
-    ...iconOption,
-    title: 'Third-Party Licenses',
-    backgroundColor: SHELL[shellTheme].bg, // = the page's body in the app's theme, so it opens without a flash
-    autoHideMenuBar: true,
-    ...(parent && !parent.isDestroyed() ? { parent } : {}),
-    webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
-  })
-  const id = win.webContents.id
-  licenseContents.add(id)
-  win.once('closed', () => licenseContents.delete(id))
-  void win.loadFile(file)
-}
-
 function showAbout(win) {
   dialog.showMessageBox(win, {
     type: 'info',
-    title: 'About Open Industry Project',
-    message: 'Open Industry Project - Simulator',
-    detail:
-      `Design, program, and simulate industrial automation - free and open.\n\n` +
-      `Early release: an update can change how projects, custom parts and PLC programs behave. ` +
-      `Keep a copy of any project you care about.\n\n` +
-      `Shell ${app.getVersion()} · Electron ${process.versions.electron} · Chromium ${process.versions.chrome}`,
-    buttons: ['OK'],
+    title: desktopText(`About ${app.name}`, `关于 ${app.name}`),
+    message: app.name,
+    detail: desktopText(
+      'Design, program, and simulate industrial automation.\n\n' +
+        'Early release: an update can change how projects, custom parts and PLC programs behave. ' +
+        'Keep a copy of any project you care about.',
+      '设计工业自动化系统，编写程序并运行仿真。\n\n' +
+        '当前为早期版本。更新后，项目、自定义部件和 PLC 程序的行为可能变化。请备份重要项目。',
+    ) + `\n\n${desktopText('Shell', '桌面程序')} ${app.getVersion()} · Electron ${process.versions.electron} · Chromium ${process.versions.chrome}`,
+    buttons: [desktopText('OK', '确定')],
   })
 }
 
@@ -1152,10 +1096,10 @@ function shellMenuItem(kind, win) {
       const rows = registry.list().slice(0, 10)
       const escape = (text) => String(text).replace(/&/g, '&&') // Windows reads & as a mnemonic marker
       return {
-        label: 'Open Recent',
+        label: desktopText('Open Recent', '最近打开'),
         submenu:
           rows.length === 0
-            ? [{ label: 'No recent projects', enabled: false }]
+            ? [{ label: desktopText('No recent projects', '没有最近使用的项目'), enabled: false }]
             : rows.map((row) => ({
                 label: escape(`${row.name || basename(row.path)} - ${row.path}`),
                 click: (_i, w) => {
@@ -1170,26 +1114,14 @@ function shellMenuItem(kind, win) {
       }
     }
     case 'quit':
-      return isMac ? { role: 'close' } : { role: 'quit' }
-    case 'docs':
-      return { label: 'Documentation', click: () => shell.openExternal('https://www.openindustryproject.org') }
-    case 'github':
-      return {
-        label: 'View on GitHub',
-        click: () => shell.openExternal('https://github.com/Open-Industry-Project/Open-Industry-Project'),
-      }
-    case 'issues':
-      return {
-        label: 'Report an Issue…',
-        click: () => shell.openExternal('https://github.com/Open-Industry-Project/Open-Industry-Project/issues'),
-      }
+      return isMac
+        ? { role: 'close', label: desktopText('Close Window', '关闭窗口') }
+        : { role: 'quit', label: desktopText('Quit', '退出') }
     case 'updates':
-      return { label: 'Check for Updates…', click: (_i, w) => void updater?.checkInteractive(appWindow(w, win)) }
-    case 'licenses':
-      return { label: 'Third-Party Licenses', click: (_i, w) => showLicenses(appWindow(w, win)) }
+      return { label: desktopText('Check for Updates…', '检查更新…'), click: (_i, w) => void updater?.checkInteractive(appWindow(w, win)) }
     case 'about':
       // macOS keeps About in the app menu, where the platform puts it
-      return isMac ? null : { label: 'About', click: (_i, w) => showAbout(appWindow(w, win)) }
+      return isMac ? null : { label: desktopText('About', '关于'), click: (_i, w) => showAbout(appWindow(w, win)) }
     default:
       return null
   }
@@ -1225,7 +1157,8 @@ function menuItemFromModel(item, win) {
   if (item.type === 'role') {
     if (!MENU_ROLES.has(item.role) || (MAC_ONLY_ROLES.has(item.role) && !isMac)) return null
     // an accelerator on a role REPLACES the role's own: Close is moved off Ctrl+W
-    return { role: item.role, ...(item.label ? { label: item.label } : {}), ...(item.accelerator ? { accelerator: item.accelerator } : {}) }
+    const label = item.label || desktopText('', chineseRoles.get(item.role))
+    return { role: item.role, ...(label ? { label } : {}), ...(item.accelerator ? { accelerator: item.accelerator } : {}) }
   }
   if (item.type === 'shell') return shellMenuItem(item.id, win)
   if (item.type !== 'command' || typeof item.id !== 'string' || typeof item.label !== 'string') return null
@@ -1247,51 +1180,49 @@ function menuItemFromModel(item, win) {
 // Until the renderer's model lands (a second or two against a cold dev server) the shell shows only
 // what it owns. Not a stand-in copy of the app menu: a copy is the thing this design
 // removes, and every command in one would dispatch into a renderer that isn't listening yet.
-const BOOTSTRAP_MENU = [
-  {
-    label: 'File',
-    items: [
-      { type: 'shell', id: 'quit' },
-    ],
-  },
-  {
-    label: 'View',
-    items: [
-      { type: 'role', role: 'reload' },
-      { type: 'role', role: 'forceReload' },
-      { type: 'role', role: 'toggleDevTools' },
-      { type: 'separator' },
-      { type: 'role', role: 'togglefullscreen' },
-    ],
-  },
-  {
-    label: 'Window',
-    role: 'window',
-    items: [
-      { type: 'role', role: 'minimize' },
-      { type: 'role', role: 'zoom' },
-      { type: 'separator' },
-      { type: 'role', role: 'close', label: 'Close Window', accelerator: 'CmdOrCtrl+Shift+W' },
-      { type: 'separator' },
-      { type: 'role', role: 'front' },
-    ],
-  },
-  {
-    label: 'Help',
-    items: [
-      { type: 'shell', id: 'docs' },
-      { type: 'shell', id: 'github' },
-      { type: 'shell', id: 'issues' },
-      { type: 'shell', id: 'updates' },
-      { type: 'shell', id: 'licenses' },
-      { type: 'shell', id: 'about' },
-    ],
-  },
-]
+function bootstrapMenu() {
+  return [
+    {
+      label: desktopText('File', '文件'),
+      items: [
+        { type: 'shell', id: 'quit' },
+      ],
+    },
+    {
+      label: desktopText('View', '视图'),
+      items: [
+        { type: 'role', role: 'reload' },
+        { type: 'role', role: 'forceReload' },
+        { type: 'role', role: 'toggleDevTools' },
+        { type: 'separator' },
+        { type: 'role', role: 'togglefullscreen' },
+      ],
+    },
+    {
+      label: desktopText('Window', '窗口'),
+      role: 'window',
+      items: [
+        { type: 'role', role: 'minimize' },
+        { type: 'role', role: 'zoom' },
+        { type: 'separator' },
+        { type: 'role', role: 'close', label: desktopText('Close Window', '关闭窗口'), accelerator: 'CmdOrCtrl+Shift+W' },
+        { type: 'separator' },
+        { type: 'role', role: 'front' },
+      ],
+    },
+    {
+      label: desktopText('Help', '帮助'),
+      items: [
+        { type: 'shell', id: 'updates' },
+        { type: 'shell', id: 'about' },
+      ],
+    },
+  ]
+}
 
 // The last model the renderer sent, so a second window (or macOS re-activate) rebuilds the real menu
 // instead of dropping back to the bootstrap one.
-let menuModel = BOOTSTRAP_MENU
+let menuModel = null
 // The latest {commandId: enabled} the focused window pushed. A rebuild (Open Recent changing) starts from the
 // model's snapshot, which is as old as the model, so the live flags are put back on top of it.
 let lastEnabled = {}
@@ -1316,11 +1247,14 @@ function refreshMenu(win) {
 }
 
 function buildMenu(win, model) {
-  if (Array.isArray(model)) menuModel = model
+  if (Array.isArray(model)) {
+    desktopLocale.use(model[0]?.locale)
+    menuModel = model
+  }
   const template = [
     // macOS convention puts an app menu (About/Quit) first; Windows/Linux fold those into File/Help.
     ...(isMac ? [{ role: 'appMenu' }] : []),
-    ...menuModel.flatMap((section) => {
+    ...(menuModel ?? bootstrapMenu()).flatMap((section) => {
       if (!section || typeof section !== 'object') return []
       if (section.role && !section.items) return MENU_ROLES.has(section.role) ? [{ role: section.role, label: section.label }] : []
       const submenu = (section.items ?? []).map((i) => menuItemFromModel(i, win)).filter(Boolean)
@@ -1451,10 +1385,13 @@ async function askAgentOpen(root, name) {
   if (win) bringForward(win)
   const opts = {
     type: 'question',
-    title: 'Open Project',
-    message: `An AI agent asks to open "${name}".`,
-    detail: `${root}\n\nThis folder is not one you have opened in the app. The project you have open now stays saved.`,
-    buttons: ['Open', 'Cancel'],
+    title: desktopText('Open Project', '打开项目'),
+    message: desktopText(`An AI agent asks to open "${name}".`, `AI 智能体请求打开「${name}」。`),
+    detail: desktopText(
+      `${root}\n\nThis folder is not one you have opened in the app. The project you have open now stays saved.`,
+      `${root}\n\n这是你尚未在应用中打开的文件夹。当前项目的已保存内容会保留。`,
+    ),
+    buttons: [desktopText('Open', '打开'), desktopText('Cancel', '取消')],
     defaultId: 1,
     cancelId: 1,
     noLink: true,
@@ -1525,14 +1462,17 @@ async function setAgentDoor(win, on) {
   const ask = (opts) => (parent ? dialog.showMessageBox(parent, opts) : dialog.showMessageBox(opts))
   const { response } = await ask({
     type: 'question',
-    title: 'Agent Connections',
-    message: 'Allow AI agents to connect to this app?',
-    detail:
+    title: desktopText('Agent Connections', '智能体连接'),
+    message: desktopText('Allow AI agents to connect to this app?', '允许 AI 智能体连接此应用吗？'),
+    detail: desktopText(
       'An AI agent you run on this computer (any MCP client, such as Claude Desktop or Claude Code) can then see ' +
-      'and edit the open project, run the simulation and change its PLC program. Its edits are saved like yours, ' +
-      "including to the project's folder.\n\n" +
-      'Any program on this computer can connect while this is on. Web pages and other computers cannot.',
-    buttons: ['Allow', 'Cancel'],
+        'and edit the open project, run the simulation and change its PLC program. Its edits are saved like yours, ' +
+        "including to the project's folder.\n\n" +
+        'Any program on this computer can connect while this is on. Web pages and other computers cannot.',
+      '开启后，本机的 MCP 客户端可以查看、编辑已打开的项目，运行仿真并修改 PLC 程序。编辑将按与手动操作相同的方式保存，也可能写入项目文件夹。\n\n' +
+        '功能开启期间，本机上的任何程序均可连接。网页和其他电脑无法连接。',
+    ),
+    buttons: [desktopText('Allow', '允许'), desktopText('Cancel', '取消')],
     defaultId: 0,
     cancelId: 1,
     noLink: true,
@@ -1545,7 +1485,95 @@ async function setAgentDoor(win, on) {
   return agentDoorState()
 }
 
-app.whenReady().then(() => {
+
+let desktopLicense = null
+let closingLicensedApp = false
+
+function licenseErrorText(error) {
+  switch (error.code) {
+    case 'ip_denied':
+      return desktopText('This IP address is outside the authorized range.', '当前来源 IP 不在授权范围内。')
+    case 'license_disabled':
+      return desktopText('Desktop authorization is disabled. Contact the administrator.', '后台尚未启用虚拟仿真 IP 授权，请联系管理员。')
+    case 'seats_full':
+      return desktopText('All training seats are in use. Try again after a seat is released.', '实训席位已满，请在席位释放后重试。')
+    case 'lease_expired':
+      return desktopText('The license session expired. Restart after the license service is available.', '授权会话已到期，请在授权服务恢复后重新启动。')
+    case 'invalid_config':
+      return desktopText('The desktop license configuration is missing or invalid.', '桌面授权配置缺失或无效。')
+    case 'invalid_assertion':
+      return desktopText('The license service returned an invalid signature.', '授权服务返回的签名无效。')
+    default:
+      return desktopText('The license service is unavailable. Check your network or contact the administrator.', '暂时无法联系授权服务，请检查网络或联系管理员。')
+  }
+}
+
+async function acquireDesktopLicense() {
+  if (!packaged || require('./package.json').oipIpAuthorization === 'disabled') return true
+  try {
+    const config = require('./license-config.json')
+    desktopLicense = createDesktopLicense(config, {
+      onLost: (error) => {
+        closingLicensedApp = true
+        for (const win of BrowserWindow.getAllWindows()) {
+          win.hide()
+          win.close()
+          setTimeout(() => {
+            if (!win.isDestroyed()) win.destroy()
+          }, 2_000).unref()
+        }
+        void dialog.showMessageBox({
+          type: 'error',
+          title: desktopText('License session ended', '授权会话已结束'),
+          message: licenseErrorText(error),
+          buttons: [desktopText('Exit', '退出')],
+        }).then(() => app.quit(), () => app.quit())
+      },
+    })
+  } catch (error) {
+    dialog.showErrorBox(desktopText('License configuration', '授权配置'), licenseErrorText({ code: 'invalid_config' }))
+    return false
+  }
+
+  while (!closingLicensedApp) {
+    try {
+      await desktopLicense.acquire()
+      return !closingLicensedApp
+    } catch (error) {
+      const { response } = await dialog.showMessageBox({
+        type: 'warning',
+        title: desktopText('IP authorization', 'IP 授权'),
+        message: licenseErrorText(error),
+        buttons: [desktopText('Retry', '重试'), desktopText('Exit', '退出')],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true,
+      })
+      if (response !== 0) return false
+    }
+  }
+  return false
+}
+
+let licenseReleased = false
+let licenseReleaseStarted = false
+app.on('before-quit', (event) => {
+  if (!desktopLicense || licenseReleased) return
+  event.preventDefault()
+  if (licenseReleaseStarted) return
+  licenseReleaseStarted = true
+  closingLicensedApp = true
+  void desktopLicense.release().finally(() => {
+    licenseReleased = true
+    app.quit()
+  })
+})
+
+app.whenReady().then(async () => {
+  if (!(await acquireDesktopLicense())) {
+    app.quit()
+    return
+  }
   markLaunch('ready')
   // Electron grants every permission by default. Keep that for the app (pointer lock for walk mode, WebXR,
   // fullscreen, clipboard ...) and refuse it to anything else.
@@ -1566,13 +1594,13 @@ app.whenReady().then(() => {
   buildMenu(win)
   // after the window, so a launch's check never competes with its first frame (updater.cjs waits further still)
   updater = setupUpdater({
+    managedRelease: packaged,
     app,
     dialog,
     getWindow: () => focusedAppWindow(),
-    // to every window running the app (not a popped-out panel, whose page is the opener's, nor the licenses page)
+    text: desktopText,
     notifyReady: (version) => {
-      for (const w of BrowserWindow.getAllWindows()) {
-        if (w.isDestroyed() || popoutOwner.has(w.id) || licenseContents.has(w.webContents.id)) continue
+      for (const w of appWindows()) {
         w.webContents.send('app:updateReady', version)
       }
     },
@@ -1592,12 +1620,12 @@ app.whenReady().then(() => {
   })
   app.on('activate', () => {
     // a macOS open-url with no window open leaves its link for this one
-    if (BrowserWindow.getAllWindows().length === 0) buildMenu(createWindow(Promise.resolve(url).then(withLaunchLink)))
+    if (!closingLicensedApp && BrowserWindow.getAllWindows().length === 0) buildMenu(createWindow(Promise.resolve(url).then(withLaunchLink)))
   })
 })
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
+  if (!closingLicensedApp && process.platform !== 'darwin') app.quit()
 })
 
 // libplctag runs a thread of its own once used; let it go before the process does

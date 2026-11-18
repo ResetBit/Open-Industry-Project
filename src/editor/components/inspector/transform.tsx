@@ -16,6 +16,8 @@ const M = defineMessages('inspector.transform', {
   title: 'Transform',
   position: 'Position ({unit})',
   rotation: 'Rotation (°)',
+  movePart: 'Move part',
+  rotatePart: 'Rotate part',
 })
 
 /**
@@ -91,7 +93,7 @@ export function TransformSection({
             accept: coerceVec3,
             setValue: (v) => {
               const a = v as readonly number[]
-              update('Move part', 'pos', (p) => ({ ...p, position: [a[0]!, a[1]!, a[2]!] }))
+              update(t(M.movePart), 'pos', (p) => ({ ...p, position: [a[0]!, a[1]!, a[2]!] }))
             },
           })
         }
@@ -105,11 +107,11 @@ export function TransformSection({
             entryUnit="m"
             disabled={disabled}
             mixed={mixedBy((p) => p.position[axis])}
-            onCommit={(v) => setAxis('Move part', `pos${axis}`, axis, v)}
+            onCommit={(v) => setAxis(t(M.movePart), `pos${axis}`, axis, v)}
             onOffset={(d) => {
               const delta: [number, number, number] = [0, 0, 0]
               delta[axis] = d
-              offset('Move part', `pos${axis}`, (parts) => translateParts(parts, ids, delta))
+              offset(t(M.movePart), `pos${axis}`, (parts) => translateParts(parts, ids, delta))
             }}
           />
         ))}
@@ -126,7 +128,7 @@ export function TransformSection({
             accept: coerceVec3,
             setValue: (v) => {
               const a = v as readonly number[]
-              update('Rotate part', 'rot', (p) => ({
+              update(t(M.rotatePart), 'rot', (p) => ({
                 ...p,
                 rotationX: normalizeAngle(a[0]!),
                 rotationY: normalizeAngle(a[1]!),
@@ -135,7 +137,7 @@ export function TransformSection({
             },
             revert: rotated
               ? () =>
-                  update('Rotate part', 'rot', (p) => {
+                  update(t(M.rotatePart), 'rot', (p) => {
                     const q = { ...p } as PartInstance
                     delete q.rotationX
                     delete q.rotationZ
@@ -153,7 +155,7 @@ export function TransformSection({
           disabled={disabled}
           mixed={mixedBy((p) => p.rotationX ?? 0)}
           onCommit={(v) =>
-            update('Rotate part', 'rot', (p) => ({ ...p, rotationX: normalizeAngle((v * Math.PI) / 180) }))
+            update(t(M.rotatePart), 'rot', (p) => ({ ...p, rotationX: normalizeAngle((v * Math.PI) / 180) }))
           }
         />
         <AxisInput
@@ -164,7 +166,7 @@ export function TransformSection({
           disabled={disabled}
           mixed={mixedBy((p) => p.rotationY)}
           onCommit={(v) =>
-            update('Rotate part', 'rot', (p) => ({ ...p, rotationY: normalizeAngle((v * Math.PI) / 180) }))
+            update(t(M.rotatePart), 'rot', (p) => ({ ...p, rotationY: normalizeAngle((v * Math.PI) / 180) }))
           }
           onOffset={(d) => offset('Rotate part', 'rot', (parts) => yawParts(parts, ids, (d * Math.PI) / 180))}
         />
@@ -176,7 +178,7 @@ export function TransformSection({
           disabled={disabled}
           mixed={mixedBy((p) => p.rotationZ ?? 0)}
           onCommit={(v) =>
-            update('Rotate part', 'rot', (p) => ({ ...p, rotationZ: normalizeAngle((v * Math.PI) / 180) }))
+            update(t(M.rotatePart), 'rot', (p) => ({ ...p, rotationZ: normalizeAngle((v * Math.PI) / 180) }))
           }
         />
       </VectorRow>

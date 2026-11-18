@@ -1,8 +1,10 @@
 {
   "name": "oip-desktop",
+  "productName": "VirtualSimulation",
+  "oipIpAuthorization": "disabled",
   "private": true,
   "version": "0.1.0",
-  "description": "Open Industry Project desktop app: the oip-web build in an Electron shell. Isolated from the root package.json on purpose.",
+  "description": "VirtualSimulation desktop app in an Electron shell.",
   "author": "Automation Standard LLC and Contributors",
   "license": "MIT",
   "homepage": "https://www.openindustryproject.org/",
@@ -27,11 +29,9 @@
   },
   "build": {
     "appId": "org.openindustryproject.simulator",
-    "productName": "Open Industry Project",
     "copyright": "Copyright (c) Automation Standard LLC and Contributors",
     "extraMetadata": {
       "name": "open-industry-project",
-      "productName": "Open Industry Project",
       "desktopName": "open-industry-project.desktop"
     },
     "directories": {
@@ -39,7 +39,7 @@
     },
     "protocols": [
       {
-        "name": "Open Industry Project link",
+        "name": "VirtualSimulation link",
         "schemes": [
           "openindustry"
         ]
@@ -49,14 +49,14 @@
       {
         "ext": "oip",
         "name": "OpenIndustryProject.Project",
-        "description": "Open Industry Project",
+        "description": "VirtualSimulation project",
         "mimeType": "application/x-open-industry-project",
         "role": "Editor"
       },
       {
         "ext": "oippart",
         "name": "OpenIndustryProject.Part",
-        "description": "Open Industry Project part",
+        "description": "VirtualSimulation part",
         "mimeType": "application/x-open-industry-project-part",
         "role": "Editor"
       }
@@ -69,6 +69,7 @@
       "vendor/libplctag/libplctag.so",
       "vendor/libplctag/LICENSE-MPL-2.0.txt",
       "oip-logo.ico",
+      "license-config.json",
       "THIRD_PARTY_LICENSES.desktop.txt"
     ],
     "extraResources": [
@@ -113,7 +114,7 @@
       "oneClick": true,
       "perMachine": false,
       "include": "installer.nsh",
-      "artifactName": "Open-Industry-Project-Setup-${version}.${ext}"
+      "artifactName": "${productName}-Setup-${version}.${ext}"
     },
     "mac": {
       "target": "dmg",
@@ -134,10 +135,10 @@
       "description": "Build production lines, robot cells and machines from real parts, wire their sensors and actuators to a PLC program, and run them in a physics simulation."
     },
     "appImage": {
-      "artifactName": "Open-Industry-Project-${version}.${ext}"
+      "artifactName": "${productName}-${version}.${ext}"
     },
     "deb": {
-      "artifactName": "open-industry-project_${version}_${arch}.${ext}"
+      "artifactName": "${productName}_${version}_${arch}.${ext}"
     }
   }
 }

@@ -3,13 +3,14 @@
 import { lazy, Suspense, useContext, useEffect, useMemo, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent, ReactNode } from 'react'
 import type { BuildingWallRule, EnumParamSpec, ParamSpec, ParamValue, PartInstance } from '../../../core/types'
-import { labelHead, partParamSpecs } from '../../../core/packageParams'
+import { partParamSpecs } from '../../../core/packageParams'
 import { listPackages } from '../../../core/parts/partRegistry'
 import { isCargoPackage } from '../../../core/parts/partPackage'
 import { canonicalAddress, looksLikeAddress, parseDirectAddress } from '../../../core/io/iecAddress'
 import { controllerOf, controllerTag, splitControllerTag } from '../../../core/io/controllerTag'
 import { normalizeHexColorList } from '../../../core/math'
 import { partDisplayNames } from '../../../core/parts/partDisplayName'
+import { hasBundledMetadata, localizePackageName, localizedParamLabel, localizedParamSpec, localizePartDisplayName, translatePartMetadata } from '../../parts/partMetadata'
 import { commsOn } from '../../../core/conveyor/conveyorDirection'
 import type { ProgramCheck, TagVerdict } from '../../program/tagVerdicts'
 import type { LiveSetpoints } from '../../controller/setpoints'
@@ -48,6 +49,7 @@ import { defineMessages, t } from '../../../core/i18n'
 
 const M = defineMessages('inspector.paramField', {
   revert: 'Revert to default',
+  editProperty: 'Edit {label}',
   liveProduct: 'Live product state: this is what the product carries now in the run (machines on the line update it).',
   authored: 'Authored: {value} (restored on Stop)',
   differs: 'Differs across {count} parts. Select one to edit.',
@@ -89,7 +91,7 @@ const ProductSettings = lazy(() => import('./productSettings').then((m) => ({ de
 
 export function ParamField({
   store,
-  spec,
+  spec: sourceSpec,
   parts: committedParts,
   allParts,
   tagIndex,
@@ -123,21 +125,25 @@ export function ParamField({
   /** the controller while the scene runs, so a tag field can force the program variable its tag names; else null */
   forcing?: TagForcing | null
 }) {
-  const parts = useLiveParam(store, committedParts, spec.key)
+  const parts = useLiveParam(store, committedParts, sourceSpec.key)
   const part = parts[0]!
   // the row shows the label's head (core labelHead: no explaining bracket, which truncated it), the tooltip the
   // whole label as its first line
-  const label = titleCase(labelHead(spec.label))
+  const localizeMetadata = hasBundledMetadata(part)
+  const spec = localizedParamSpec(sourceSpec, localizeMetadata)
+  const label = titleCase(localizedParamLabel(spec.label, localizeMetadata, true))
+  const editLabel = t(M.editProperty, { label: localizedParamLabel(spec.label, localizeMetadata) })
   // The doc line comes from the PACKAGE first (the SDK's `desc`, authored next to the param) and falls back
   // to the host's table, which now only carries the rows/types the packages don't own.
   const system = useContext(DisplayUnitsContext)
   const guardMode = useContext(GuardOpeningsModeContext)
   const controllerRow = useContext(ControllerRowContext)
-  const tooltip = buildParamTooltip(spec, titleCase(spec.label), spec.desc ?? paramDesc(part.type, spec.key), system)
+  const desc = spec.desc && localizeMetadata ? translatePartMetadata(spec.desc) : spec.desc
+  const tooltip = buildParamTooltip(spec, titleCase(localizedParamLabel(spec.label, localizeMetadata)), desc ?? paramDesc(part.type, spec.key), system)
   const { value: shared, mixed } = sharedParam(parts, spec.key)
   const setParam = (value: ParamValue) =>
     update(
-      `Edit ${spec.label}`,
+      editLabel,
       spec.key,
       (p) => ({ ...p, params: { ...p.params, [spec.key]: value } }) as PartInstance,
     )
@@ -149,7 +155,7 @@ export function ParamField({
     }
     const tgt = spec.stamps
     const opt = spec.options.find((o) => o.value === value)
-    update(`Edit ${spec.label}`, spec.key, (p) => ({
+    update(editLabel, spec.key, (p) => ({
       ...p,
       params: { ...p.params, [spec.key]: value, ...(opt?.rows ? { [tgt]: opt.rows.map((r) => r.slice()) } : {}) },
     }) as PartInstance)
@@ -157,7 +163,7 @@ export function ParamField({
   // A numberList write. A shape-preset enum that stamps this list drifts to the matching option (or the
   // row-less 'custom' one) whenever the list changes by any route: the grid, a paste, a revert.
   const setRows = (next: number[][]): void =>
-    update(`Edit ${spec.label}`, spec.key, (p) => {
+    update(editLabel, spec.key, (p) => {
       const params: Record<string, ParamValue> = { ...p.params, [spec.key]: next }
       const en = partParamSpecs(p).find((s): s is EnumParamSpec => s.kind === 'enum' && s.stamps === spec.key)
       if (en) {
@@ -271,7 +277,7 @@ export function ParamField({
             disabled={disabled || live !== undefined}
             extra={live ? revertSlot : revertArrow}
             onToggle={(bit, on) =>
-              update(`Edit ${spec.label}`, spec.key, (p) => {
+              update(editLabel, spec.key, (p) => {
                 const cur = (p.params as Record<string, unknown>)[spec.key]
                 const was = Math.max(0, Math.round(typeof cur === 'number' ? cur : spec.default))
                 return { ...p, params: { ...p.params, [spec.key]: normalizeNumber(spec, on ? was | (1 << bit) : was & ~(1 << bit)) } } as PartInstance
@@ -367,7 +373,7 @@ export function ParamField({
         const dangling = current !== '' && !products.some((p) => p.id === current)
         // choosing another product clears the settings kept for the last one (they name its params, not this one's)
         const setProduct = (v: string): void =>
-          update(`Edit ${spec.label}`, spec.key, (p) => ({ ...p, params: { ...p.params, [spec.key]: v, ...(spec.settings ? { [spec.settings]: '' } : {}) } }) as PartInstance)
+          update(editLabel, spec.key, (p) => ({ ...p, params: { ...p.params, [spec.key]: v, ...(spec.settings ? { [spec.settings]: '' } : {}) } }) as PartInstance)
         const chosen = !mixed && spec.settings ? products.find((p) => p.id === current) : undefined
         const settingsRows = chosen && spec.settings ? (
           <Suspense fallback={null}>
@@ -399,7 +405,7 @@ export function ParamField({
                     {dangling && <option value={current}>{t(M.missing, { name: current })}</option>}
                     {products.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.name}
+                        {localizePackageName(p)}
                       </option>
                     ))}
                   </select>
@@ -463,7 +469,7 @@ export function ParamField({
               {dangling && <option value={current}>{t(M.missing, { name: current })}</option>}
               {candidates.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {names.get(p.id)}
+                  {localizePartDisplayName(p, names.get(p.id) ?? p.id)}
                 </option>
               ))}
             </select>
@@ -501,7 +507,7 @@ export function ParamField({
       const locatedName = address && !('error' in address) && onController === null ? located.get(address.text) : undefined
       // the param a setpoint tag stands in for (a speed tag's Speed), named when the tag is undriven
       const replacedSpec = spec.setpointFor ? partParamSpecs(part).find((s) => s.key === spec.setpointFor) : undefined
-      const replaces = replacedSpec ? labelHead(replacedSpec.label) : undefined
+      const replaces = replacedSpec ? localizedParamLabel(replacedSpec.label, localizeMetadata, true) : undefined
       // Committed on Enter / blur / a suggestion pick, not per keystroke: every commit persists the whole
       // project, and each half-typed name ("M", "Mo", "Mot") would be bound, wired and checked in turn.
       return row(
@@ -576,7 +582,7 @@ export function ParamField({
       }
       // several params in one edit (a table and its names, or a row and everything pointing at it): one undo step
       const setMany = (patch: Record<string, ParamValue>): void =>
-        update(`Edit ${spec.label}`, spec.key, (p) => ({ ...p, params: { ...p.params, ...patch } }) as PartInstance)
+        update(editLabel, spec.key, (p) => ({ ...p, params: { ...p.params, ...patch } }) as PartInstance)
       // posing is offered where the rig can show the row (its joint count fits it)
       const canPose = (capturePose?.() ?? null)?.length
       // the steps of numbered programs (ParamSpec.program): programs of steps, the running one highlighted
@@ -723,7 +729,7 @@ export function GroupSection({
   forcing?: TagForcing | null
 }) {
   return (
-    <Fold title={titleCase(node.name)} path={node.path} depth={depth} collapsed={collapsed} toggle={toggle}>
+    <Fold title={titleCase(parts[0] && hasBundledMetadata(parts[0]) ? translatePartMetadata(node.name) : node.name)} path={node.path} depth={depth} collapsed={collapsed} toggle={toggle}>
       {node.specs.map((spec) => (
         <ParamField key={spec.key} store={store} spec={spec} parts={parts} allParts={allParts} tagIndex={tagIndex} liveSetpoints={liveSetpoints} disabled={disabled} update={update} onContext={onContext} capturePose={capturePose} previewPose={previewPose} forcing={forcing} />
       ))}

@@ -3,9 +3,14 @@
 import type { ReactNode } from 'react'
 import type { PartInstance } from '../../../core/types'
 import type { PartPackage } from '../../../core/parts/partPackage'
-import { labelHead, packageParamSpecs, switchValue, visibleWhenHolds } from '../../../core/packageParams'
+import { packageParamSpecs, switchValue, visibleWhenHolds } from '../../../core/packageParams'
+import { builtInPackage } from '../../../core/parts/partRegistry'
+import { defineMessage, t } from '../../../core/i18n'
+import { localizePackageName, localizedParamLabel, localizedParamSpec, translatePartMetadata } from '../../parts/partMetadata'
 import { titleCase } from './shared'
 import type { Update } from './shared'
+
+const EDIT = defineMessage('inspector.productSetting.edit', 'Edit {part} setting')
 
 /**
  * A product param's settings ({@link TextParamSpec.settings}): the chosen product's own params, edited as fields under
@@ -25,11 +30,12 @@ export function ProductSettings({
   disabled: boolean
   update: Update
 }) {
+  const localizeMetadata = builtInPackage(pkg.id) !== undefined
   const values = parseProductSettings(stored)
   const specs = packageParamSpecs(pkg).filter((s) => !s.hidden && (s.kind === 'enum' || s.kind === 'number' || s.kind === 'boolean' || (s.kind === 'color' && !s.list) || (s.kind === 'text' && !s.product)))
   const all = packageParamSpecs(pkg)
   const set = (key: string, value: string | number | boolean, def: unknown): void =>
-    update(`Edit ${pkg.name} setting`, settingsKey, (p) => {
+    update(t(EDIT, { part: localizePackageName(pkg) }), settingsKey, (p) => {
       const next = { ...parseProductSettings((p.params as Record<string, unknown>)[settingsKey]) }
       if (value === def) delete next[key]
       else next[key] = value
@@ -39,7 +45,8 @@ export function ProductSettings({
     <>
       {specs
         .filter((s) => visibleWhenHolds(s.visibleWhen, s.visibleWhen ? switchValue(all, { ...values }, s.visibleWhen.param) : undefined))
-        .map((s) => {
+        .map((sourceSpec) => {
+          const s = localizedParamSpec(sourceSpec, localizeMetadata)
           const v = values[s.key] ?? s.default
           let control: ReactNode
           if (s.kind === 'enum') {
@@ -77,8 +84,8 @@ export function ProductSettings({
           return (
             <div key={s.key} className="prop-row prop-row-product-setting" data-param={`${settingsKey}.${s.key}`}>
               <label className="field">
-                <span className="field-label" title={s.desc}>
-                  {titleCase(labelHead(s.label))}
+                <span className="field-label" title={s.desc && localizeMetadata ? translatePartMetadata(s.desc) : s.desc}>
+                  {titleCase(localizedParamLabel(s.label, localizeMetadata, true))}
                 </span>
                 <span className="field-control">{control}</span>
               </label>

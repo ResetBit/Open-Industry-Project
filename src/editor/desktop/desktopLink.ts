@@ -14,6 +14,18 @@ import { projectToOipBytes } from '../../core/project/projectArchive'
 import type { EditorStore } from '../store/store'
 import { warmShippedAssets } from '../parts/shippedAssetCache'
 import { FOLDER_OPTIONS } from '../project/folderOptions'
+import { defineMessages, t } from '../../core/i18n'
+
+const M = defineMessages('desktopLink', {
+  didNotOpen: "Desktop app did not open",
+  noAppDetail: "The desktop app does not seem to be installed here, or it is a version from before it could open this.",
+  getApp: "Get the Desktop App",
+  sendFailed: "Could not send the project to the desktop app",
+  sendFailedDetail: "{error} Your work is still here in the browser.",
+  sent: "Sent to the desktop app",
+  sentDetail: "\"{name}\" opens there as a project of its own. This browser keeps its copy, and changes in one do not reach the other.",
+  untitled: "Untitled Project",
+})
 
 export const DESKTOP_LINK_SCHEME = 'openindustry'
 
@@ -72,9 +84,9 @@ export function openInDesktopApp(store: EditorStore, room: string | null = curre
     settle()
     decide(false)
     store.showSaveNotice(
-      'Desktop app did not open',
-      'The desktop app does not seem to be installed here, or it is a version from before it could open this.',
-      { label: 'Get the Desktop App', command: 'help.getDesktopApp' },
+      t(M.didNotOpen),
+      t(M.noAppDetail),
+      { label: t(M.getApp), command: 'help.getDesktopApp' },
     )
   }, NO_APP_AFTER_MS)
   // A click on a link, the gesture browsers expect before they hand a scheme to the OS. Chromium and WebKit keep
@@ -101,11 +113,11 @@ async function handOver(store: EditorStore, secret: string, decided: Promise<boo
     return
   }
   if (error !== null) {
-    store.showSaveNotice('Could not send the project to the desktop app', `${error} Your work is still here in the browser.`)
+    store.showSaveNotice(t(M.sendFailed), t(M.sendFailedDetail, { error }))
     return
   }
   store.showSaveNotice(
-    'Sent to the desktop app',
-    `"${project.name || 'Untitled Project'}" opens there as a project of its own. This browser keeps its copy, and changes in one do not reach the other.`,
+    t(M.sent),
+    t(M.sentDetail, { name: project.name || t(M.untitled) }),
   )
 }

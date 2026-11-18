@@ -1,0 +1,24 @@
+.workcell-inspection {
+  display: grid;
+  gap: 8px;
+}
+.workcell-inspection h3,
+.workcell-inspection p {
+  margin: 0;
+}
+.workcell-inspection-pair,
+.workcell-inspection-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.workcell-inspection-part {
+  display: grid;
+  gap: 4px;
+  flex: 1 1 160px;
+  min-width: 0;
+}
+.workcell-inspection-part select {
+  width: 100%;
+}
+

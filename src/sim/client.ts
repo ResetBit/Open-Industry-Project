@@ -19,6 +19,9 @@ import { FrameWireDecoder, RecordDecoder } from './frameWire'
 export type StepDone = Omit<Extract<WorkerToMain, { type: 'stepped' }>, 'type' | 'seq'>
 /** each cargo body's velocity and contacts (protocol.ts 'cargoDetail') */
 export type CargoDetail = Omit<Extract<WorkerToMain, { type: 'cargoDetail' }>, 'type' | 'seq'>
+/** The collision shapes of a pair sampled at the same simulation step. */
+export type PartInterferenceDetail = Omit<Extract<WorkerToMain, { type: 'partInterference' }>, 'type' | 'seq'>
+type QueryReply = StepDone | CargoDetail | PartInterferenceDetail | null
 
 /** an attached ST program faulting in the worker (runtime scan fault / backstop compile failure) */
 export interface PlcFault {
@@ -99,8 +102,8 @@ export class SimClient {
   private lastAliveAt = 0
   private framed = false
   private watchdog: ReturnType<typeof setInterval> | null = null
-  /** callers waiting on a 'stepped' or 'cargoDetail' answer, by seq; each gets null when the run ends first */
-  private readonly waiters = new Map<number, (msg: StepDone | CargoDetail | null) => void>()
+  /** callers waiting on a query answer, by seq; each gets null when the run ends first */
+  private readonly waiters = new Map<number, (msg: QueryReply) => void>()
   private nextSeq = 1
   /** the key set of the program whose table arrived last (core/watchKeys.ts), by the worker's number for it */
   private watchKeySet: { of: number; set: object; layout: WatchLayout | null } | null = null
@@ -176,7 +179,7 @@ export class SimClient {
         })
       } else if (msg.type === 'alive') {
         this.lastAliveAt = performance.now()
-      } else if (msg.type === 'stepped' || msg.type === 'cargoDetail') {
+      } else if (msg.type === 'stepped' || msg.type === 'cargoDetail' || msg.type === 'partInterference') {
         const done = this.waiters.get(msg.seq)
         this.waiters.delete(msg.seq)
         done?.(msg)
@@ -396,7 +399,12 @@ export class SimClient {
     return this.ask((seq) => ({ type: 'inspectCargo', seq })) as Promise<CargoDetail | null>
   }
 
-  private ask(msg: (seq: number) => MainToWorker): Promise<StepDone | CargoDetail | null> {
+  /** Inspect the selected equipment pair at the current simulation time. */
+  inspectPartInterference(first: string, second: string): Promise<PartInterferenceDetail | null> {
+    return this.ask((seq) => ({ type: 'inspectPartInterference', seq, first, second })) as Promise<PartInterferenceDetail | null>
+  }
+
+  private ask(msg: (seq: number) => MainToWorker): Promise<QueryReply> {
     if (!this._running) return Promise.resolve(null)
     const seq = this.nextSeq++
     return new Promise((resolve) => {

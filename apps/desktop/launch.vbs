@@ -1,4 +1,4 @@
-' Launch Open Industry Project - Simulator with NO visible console window.
+' Launch VirtualSimulation - Simulator with NO visible console window.
 ' The desktop shortcut targets this script; it runs launch.cmd hidden (window style 0),
 ' which orchestrates the dev server + Electron. Electron shows its own GUI window normally.
 Set fso = CreateObject("Scripting.FileSystemObject")

@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { PRODUCT_NAME } from './productBrand'
 import { DEFAULT_BOTTOM_HEIGHT, DOCK_PANEL_TITLES, SLOT_ORDER, buildDockGrid, defaultDockLayout } from './dockLayout'
 
 /**
@@ -196,8 +197,7 @@ describe('boot skeleton mirrors the shell it stands in for', () => {
   // if these two drift, every cold boot flashes one app name and settles on another.
   it('names the app the same way the title effect does', () => {
     const skeleton = capture(html.match(/<title>([^<]+)/), 1, '<title> in app/index.html')
-    const appTitle = capture(app.match(/const APP_TITLE = '([^']+)'/), 1, 'APP_TITLE in App.tsx')
-    expect(skeleton).toBe(appTitle)
+    expect(skeleton).toBe(PRODUCT_NAME)
   })
 
   it('is retired by App, not left to linger', () => {

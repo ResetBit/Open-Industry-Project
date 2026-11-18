@@ -68,6 +68,14 @@ import { NameDialogHost } from './components/NameDialog'
 import { PartChangeDialogHost } from './components/PartChangeDialog'
 import { ExportProjectDialog } from './components/ExportProjectDialog'
 import { Toolbar } from './components/Toolbar'
+import { TrainingToolbar } from './components/TrainingToolbar'
+import type { TrainingSection } from './components/TrainingToolbar'
+import { currentDocumentId } from './project/documentStore'
+import { getPackage } from '../core/parts/partRegistry'
+import { teachModel } from './components/inspector/teachModel'
+import { takeTrainingLaunch } from './training/launch'
+import type { Lesson } from './training/lessons'
+import { hasAutomaticVision } from './vision/profile'
 import { ViewportSelectMenu } from './components/ViewportSelectMenu'
 import { ViewportToolbar } from './components/ViewportToolbar'
 import { GuardOpeningsBanner } from './components/GuardOpeningsBanner'
@@ -119,6 +127,7 @@ import {
   type DockSlotId,
 } from './dockLayout'
 import { DESKTOP_MAC, DESKTOP_SHELL, getDesktopUpdate, getOipMenuApi } from './desktop/desktopMenuBridge'
+import { PRODUCT_NAME } from './productBrand'
 import { commandEnabled, desktopMenuModel, menuEnablement, runCommand, runMenuCommand, setCommandCtx, type CommandUi } from './commands'
 import type { EditorStore } from './store/store'
 import type { ProjectJSON } from '../core/project/project'
@@ -143,10 +152,16 @@ const PublishPartDialog = lazy(() => import('./components/PublishPartDialog').th
 const TestResultsOverlay = lazy(() => import('./components/TestResultsOverlay').then((m) => ({ default: m.TestResultsOverlay })))
 // desktop only, and loaded at an agent's first call, so it stays off the first frame
 // LAZY: the watch dock is a background tab until a program is being debugged, and it brings the declaration reader
+const TrainingTasks = lazy(() => import('./components/TrainingTasks').then((m) => ({ default: m.TrainingTasks })))
+const TrainingMonitor = lazy(() => import('./components/TrainingMonitor').then((m) => ({ default: m.TrainingMonitor })))
+const VisionOverlay = lazy(() => import('./components/VisionOverlay').then((m) => ({ default: m.VisionOverlay })))
+const PlcConnectionsWindow = lazy(() => import('./components/plc/PlcConnectionsWindow').then((m) => ({ default: m.PlcConnectionsWindow })))
 const WatchPanel = lazy(() => import('./components/plc/WatchPanel').then((m) => ({ default: m.WatchPanel })))
 const AgentActivity = lazy(() => import('./components/AgentActivity').then((m) => ({ default: m.AgentActivity })))
 
 const M = defineMessages('app', {
+  noRobotTitle: 'Select a robot for teaching',
+  noRobotDetail: 'Place or import a robot with an articulated model, then open Robot teaching.',
   tabScene: 'Scene',
   tabParts: 'Parts',
   tabInspect: 'Inspect',
@@ -163,7 +178,6 @@ const M = defineMessages('app', {
 
 // The app half of the window title. Matches the <title> in app/index.html, which is what the tab reads
 // until the first render replaces it with the document name (see the title effect in App).
-const APP_TITLE = 'Open Industry Project'
 
 const noSubscribe = (): (() => void) => () => {}
 /** a file the user picked that failed to import, said as the importers say their own failures */
@@ -522,6 +536,28 @@ export function App({ store, sim }: AppProps) {
   // The project a test run is grading. Cloned at open (see commandUi) so the run is judged against the
   // document as it was when the user asked, not as it drifts while the specs step.
   const [testProject, setTestProject] = useState<ProjectJSON | null>(null)
+  const [trainingSection, setTrainingSection] = useState<TrainingSection>('design')
+  const [trainingPanel, setTrainingPanel] = useState<'tasks' | 'signals' | 'vision' | 'verify' | null>(null)
+  const [trainingLesson, setTrainingLesson] = useState<Lesson['id'] | undefined>()
+  const [teachRequest, setTeachRequest] = useState(0)
+  const [monitorReady, setMonitorReady] = useState(false)
+  const [visionReady, setVisionReady] = useState(false)
+  const closeTrainingPanel = useCallback(() => setTrainingPanel(null), [])
+  const trainingSceneLoad = store.sceneLoads
+
+  useEffect(() => {
+    const lesson = takeTrainingLaunch()
+    setTrainingLesson(lesson)
+    if (lesson === 'vision') {
+      setVisionReady(true)
+      setTrainingSection('vision')
+      setTrainingPanel('vision')
+    }
+  }, [])
+
+  useEffect(() => {
+    if (hasAutomaticVision(currentDocumentId(), store.getState().scene)) setVisionReady(true)
+  }, [store, trainingSceneLoad])
   const isMobile = useMediaQuery(MOBILE_QUERY)
   // phones are view/select/run only - no part authoring (catalog + transform tools dropped)
   const isPhone = useMediaQuery(PHONE_QUERY)
@@ -575,7 +611,7 @@ export function App({ store, sim }: AppProps) {
   // project of the user's until an edit forks it (store.stashDemoSession).
   useEffect(() => {
     const doc = state.collab ? null : state.demoSession ? `${DEMO_SCENE_NAME} (example)` : state.projectName.trim()
-    document.title = doc ? `${doc} - ${APP_TITLE}` : APP_TITLE
+    document.title = doc ? `${doc} - ${PRODUCT_NAME}` : PRODUCT_NAME
   }, [state.collab, state.demoSession, state.projectName])
 
   // ── Commands ───────────────────────────────────────────────────────────────────────────────────
@@ -1161,6 +1197,30 @@ export function App({ store, sim }: AppProps) {
     [sizes, dockTrack],
   )
   const presenting = state.presenting // only the scene (components/PresentOverlay.tsx; its grid is in toolbar.css)
+  const showTrainingBar = !isMobile && !df && !presenting
+  function openTrainingSection(section: TrainingSection) {
+    setTrainingSection(section)
+    if (section === 'design') {
+      setTrainingPanel(null)
+      store.revealPanel('catalog')
+    } else if (section === 'teach') {
+      setTrainingPanel(null)
+      const robots = state.scene.parts.filter((part) => part.type === 'part' && teachModel(part, getPackage(part.packageId)) !== null)
+      const target = robots.find((part) => state.selectedIds.includes(part.id)) ?? robots[0]
+      if (!target) {
+        store.showSaveNotice(t(M.noRobotTitle), t(M.noRobotDetail))
+        return
+      }
+      store.select(target.id)
+      store.revealPanel('inspector')
+      setTeachRequest((value) => value + 1)
+    } else {
+      if (section === 'verify') setMonitorReady(true)
+      if (section === 'vision') setVisionReady(true)
+      if (section === 'signals') store.revealPanel('st')
+      setTrainingPanel(section)
+    }
+  }
   const appStyle: CSSProperties = {
     ...(isMobile
       ? {
@@ -1174,7 +1234,7 @@ export function App({ store, sim }: AppProps) {
             gridTemplateRows: '48px minmax(0, 1fr)',
             gridTemplateAreas: '"toolbar" "viewport"',
           }
-        : buildDockGrid(dockLayout, { ...sizes, dock: dockTrack })),
+        : buildDockGrid(dockLayout, { ...sizes, dock: dockTrack }, showTrainingBar ? 82 : 48)),
     ...sizeVars,
   }
 
@@ -1194,7 +1254,7 @@ export function App({ store, sim }: AppProps) {
           </div>
         )
       case 'inspector':
-        return <Inspector store={store} state={state} controller={controller} packageThumbnails={packageThumbnails} />
+        return <Inspector store={store} state={state} controller={controller} packageThumbnails={packageThumbnails} teachRequest={teachRequest} />
       case 'catalog':
         return (
           <Catalog
@@ -1291,7 +1351,12 @@ export function App({ store, sim }: AppProps) {
       className={`app${isMobile ? ' mobile' : ''}${isPhone ? ' phone' : ''}${DESKTOP_SHELL ? ' desktop-shell' : ''}${DESKTOP_MAC ? ' desktop-mac' : ''}${presenting ? ' presenting' : ''}`}
       style={appStyle}
     >
-      {!presenting && <Toolbar store={store} state={state} controller={controller} />}
+      {!presenting && (showTrainingBar ? (
+        <div className="training-header">
+          <Toolbar store={store} state={state} controller={controller} />
+          <TrainingToolbar active={trainingSection} ready={controller !== null} onSelect={openTrainingSection} />
+        </div>
+      ) : <Toolbar store={store} state={state} controller={controller} />)}
       {renderDockColumn({
         side: 'left',
         topId: 'leftTop',
@@ -1451,7 +1516,7 @@ export function App({ store, sim }: AppProps) {
           )}
           {mobilePanel === 'inspector' && (
             <div className="mobile-drawer right">
-              <Inspector store={store} state={state} controller={controller} packageThumbnails={packageThumbnails} />
+              <Inspector store={store} state={state} controller={controller} packageThumbnails={packageThumbnails} teachRequest={teachRequest} />
             </div>
           )}
           {!isPhone && mobilePanel === 'catalog' && (
@@ -1574,6 +1639,12 @@ export function App({ store, sim }: AppProps) {
       {/* the projects list: every project this browser holds. Not a start screen - /app/ still opens onto the
           working copy, and this is what a returning user reaches for when there is a second one */}
       {projectsOpen && <ProjectsOverlay store={store} state={state} onClose={() => setProjectsOpen(false)} />}
+      <Suspense fallback={null}>
+        {trainingPanel === 'tasks' && <TrainingTasks store={store} controller={controller} activeLesson={trainingLesson} onClose={closeTrainingPanel} />}
+        {trainingPanel === 'signals' && controller && <PlcConnectionsWindow store={store} state={state} controller={controller} plcName={null} onClose={closeTrainingPanel} />}
+        {monitorReady && controller && <TrainingMonitor store={store} state={state} controller={controller} open={trainingPanel === 'verify'} onClose={closeTrainingPanel} />}
+        {visionReady && view && <VisionOverlay view={view} controller={controller} open={trainingPanel === 'vision'} onClose={closeTrainingPanel} />}
+      </Suspense>
       {/* the project's own pass/fail criteria, run in-tab (Simulation → Run Project Tests) */}
       {testProject && (
         <Suspense fallback={null}>
@@ -1638,7 +1709,7 @@ export function App({ store, sim }: AppProps) {
           shown
           desktop={DESKTOP_SHELL}
           onReload={() => location.reload()}
-          onUpdate={getDesktopUpdate}
+          onUpdate={getOipMenuApi()?.checkForUpdates ? getDesktopUpdate : undefined}
         />
       ) : state.supersededByOtherTab ? (
         <OtherTabBanner shown onReload={() => location.reload()} onExport={() => void downloadProject(store)} />

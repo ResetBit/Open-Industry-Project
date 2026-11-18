@@ -60,15 +60,7 @@ export const DESKTOP_SHELL = getOipMenuApi() !== null
 /** True only in the shell on macOS, whose chrome differs (screen menu bar, traffic lights inset left). */
 export const DESKTOP_MAC = getOipMenuApi()?.platform === 'darwin'
 
-/**
- * Where a desktop user gets a newer build of the app (NewerBuildBanner): the shell's own update check, which
- * downloads and offers a restart (apps/desktop/updater.cjs). The site is the fallback for a shell too old to
- * have one.
- */
-export const DESKTOP_UPDATE_URL = 'https://www.openindustryproject.org/'
-
+/** Ask the product's desktop shell how updates are distributed. */
 export function getDesktopUpdate(): void {
-  const check = getOipMenuApi()?.checkForUpdates
-  if (check) void check()
-  else window.open(DESKTOP_UPDATE_URL, '_blank')
+  void getOipMenuApi()?.checkForUpdates?.()
 }

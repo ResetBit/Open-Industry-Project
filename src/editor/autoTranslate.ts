@@ -1,9 +1,8 @@
 /**
- * Shows the editor in the browser's language by feeding its messages to the browser's own on-device translator
- * (the Translator API), so the app ships no translations.
+ * The editor can use the bundled Simplified Chinese dictionary or the browser's on-device Translator API.
  *
  * Only the messages declared in core/i18n are translated, never the page: /app/ keeps `translate="no"`, so tags,
- * ST source, part ids and keywords stay as written. Anything that doesn't work out leaves English in place: no
+ * ST source, part ids and keywords stay as written. In automatic mode, a failed translation leaves English in place: no
  * Translator API (Firefox, Safari and Electron today), an unsupported language, a refused download, or a
  * translation that dropped a `{placeholder}`.
  *
@@ -15,13 +14,24 @@
  *   (TranslateToast.tsx). "Keep English" and the Settings choice store `en`, which turns all of this off.
  */
 import { messageCatalog, onMessageDefined, setLocale, type MessageId } from '../core/i18n'
+import { getOipMenuApi } from './desktop/desktopMenuBridge'
 
-/** 'en' once the person chose English; absent means follow the browser. A per-browser preference. */
+/** A per-profile preference. The desktop defaults to Simplified Chinese and the web defaults to automatic. */
 export const LANGUAGE_KEY = 'oip-web/language'
 /** { lang, entries: { [id]: [english, translation] } } */
 export const TRANSLATIONS_KEY = 'oip-web/translations'
 
-export type LanguagePref = 'auto' | 'en'
+export type LanguagePref = 'auto' | 'en' | 'zh-CN'
+
+export function usesBundledChinese(pref: LanguagePref, lang: string | null): boolean {
+  if (pref !== 'auto' || !lang) return pref === 'zh-CN'
+  try {
+    const locale = new Intl.Locale(lang)
+    return locale.language === 'zh' && (locale.script ?? locale.maximize().script) === 'Hans'
+  } catch {
+    return false
+  }
+}
 
 type Availability = 'unavailable' | 'downloadable' | 'downloading' | 'available'
 
@@ -175,17 +185,18 @@ function storage(): Storage | null {
 
 export function languagePref(): LanguagePref {
   try {
-    return storage()?.getItem(LANGUAGE_KEY) === 'en' ? 'en' : 'auto'
+    const stored = storage()?.getItem(LANGUAGE_KEY)
+    if (stored === 'en' || stored === 'auto' || stored === 'zh-CN') return stored
   } catch {
-    return 'auto'
+    // A blocked profile uses the platform default.
   }
+  return getOipMenuApi() ? 'zh-CN' : 'auto'
 }
 
 /** Takes effect on the next load: a mounted tree keeps the strings it rendered (core/i18n setLocale). */
 export function setLanguagePref(pref: LanguagePref): void {
   try {
-    if (pref === 'en') storage()?.setItem(LANGUAGE_KEY, 'en')
-    else storage()?.removeItem(LANGUAGE_KEY)
+    storage()?.setItem(LANGUAGE_KEY, pref)
   } catch {
     /* storage disabled: this load keeps what it has */
   }
@@ -337,9 +348,16 @@ export function dismissTranslateStatus(): void {
  * Boot, before React mounts: install the cached translations so the first render is already translated, then
  * check with the browser's translator for what is missing. Called once from main.tsx.
  */
-export function initLanguage(): void {
-  if (languagePref() === 'en') return
+export function initLanguage(): void | Promise<void> {
+  const pref = languagePref()
+  if (pref === 'en') return
   const target = browserLanguage()
+  if (usesBundledChinese(pref, target)) {
+    return import('./locales/zh-CN').then(({ simplifiedChinese }) => {
+      setLocale('zh-CN', new Map(Object.entries(simplifiedChinese)))
+      if (typeof document !== 'undefined') document.documentElement.lang = 'zh-CN'
+    })
+  }
   if (!target) return
   lang = target
   cache = parseCache(storage()?.getItem(TRANSLATIONS_KEY) ?? null, lang)

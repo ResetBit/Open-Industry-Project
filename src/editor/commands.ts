@@ -14,7 +14,7 @@
 
 import { activeBinding, type KeyActionId } from '../core/keymap'
 import { isKnownDialect } from '../core/dialect'
-import { defineMessage, t, type MessageId } from '../core/i18n'
+import { activeLocale, defineMessage, t, type MessageId } from '../core/i18n'
 import { openDemoScene } from './project/sceneFile'
 import { clearParkedSplitOff, downloadProject, downloadProjectDocument, exportChoicesFor, readParkedSplitOff } from './project/projectFile'
 import { saveProject } from './project/saveProject'
@@ -1303,7 +1303,7 @@ export type MenuNode =
   | { command: string }
   | { separator: true }
   | { role: string; label?: string; accelerator?: string }
-  | { shell: 'recent' | 'quit' | 'docs' | 'github' | 'issues' | 'updates' | 'licenses' | 'about' }
+  | { shell: 'recent' | 'quit' | 'updates' | 'about' }
 
 export interface MenuSection {
   label: string
@@ -1429,11 +1429,7 @@ export const DESKTOP_MENU: readonly MenuSection[] = [
       { command: 'help.tutorial' },
       { command: 'help.agentConnections' },
       { separator: true },
-      { shell: 'docs' },
-      { shell: 'github' },
-      { shell: 'issues' },
       { shell: 'updates' },
-      { shell: 'licenses' },
       { shell: 'about' },
     ],
   },
@@ -1453,6 +1449,7 @@ export interface MenuModelItem {
 
 export interface MenuModelSection {
   label: string
+  locale?: 'zh-CN' | 'en'
   role?: string
   items?: MenuModelItem[]
 }
@@ -1463,8 +1460,10 @@ export interface MenuModelSection {
  * cheaper {id: boolean} channel (see menuEnablement).
  */
 export function desktopMenuModel(): MenuModelSection[] {
-  return DESKTOP_MENU.map((section) => ({
+  const locale = activeLocale() === 'zh-CN' ? 'zh-CN' : 'en'
+  return DESKTOP_MENU.map((section, index) => ({
     label: groupLabel(section.label),
+    ...(index === 0 ? { locale } : {}),
     ...(section.role ? { role: section.role } : {}),
     ...(section.items
       ? {

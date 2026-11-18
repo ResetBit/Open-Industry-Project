@@ -1,0 +1,114 @@
+
+.training-header {
+  grid-area: toolbar;
+  display: grid;
+  grid-template-rows: 48px 34px;
+  min-width: 0;
+  z-index: 2;
+}
+
+.training-header > .toolbar {
+  grid-area: auto;
+}
+
+.training-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--panel-edge);
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.training-bar button {
+  flex: none;
+  min-height: 25px;
+  padding: 2px 11px;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  background: transparent;
+}
+
+.training-bar button[aria-pressed='true'] {
+  border-color: var(--panel-edge);
+  background: var(--bg);
+  font-weight: 600;
+}
+
+.training-window {
+  position: fixed;
+  z-index: 28;
+  top: 94px;
+  right: 12px;
+  width: min(470px, calc(100vw - 24px));
+  max-height: calc(100dvh - 106px);
+  overflow: auto;
+  padding: 0 14px 12px;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 7px;
+  box-shadow: 0 12px 38px #0003;
+}
+
+.training-window .author-head {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  background: var(--panel);
+}
+
+.training-window :is(h3, p, ul, ol, table) {
+  margin-block: 8px;
+}
+
+.training-window table {
+  width: 100%;
+  text-align: left;
+  border-collapse: collapse;
+}
+
+.training-window :is(th, td) {
+  padding: 4px;
+  border-bottom: 1px solid var(--panel-edge);
+}
+
+.training-actions,
+.training-field {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-block: 8px;
+}
+
+.training-field input,
+.training-field select {
+  max-width: 100%;
+}
+
+.training-window .training-section {
+  border-top: 1px solid var(--panel-edge);
+  margin-block: 10px 0;
+  padding-block: 8px 0;
+}
+
+.training-tasks {
+  width: min(690px, calc(100vw - 32px));
+  max-height: calc(100dvh - 48px);
+  overflow: auto;
+}
+
+.training-tasks .training-section {
+  border-top: 1px solid var(--panel-edge);
+  padding-block: 10px;
+}
+
+.training-tasks .training-section h3 {
+  margin: 0;
+}
+
+.training-window details summary {
+  cursor: pointer;
+}

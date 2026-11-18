@@ -1,4 +1,4 @@
-// The content version of every unhashed asset the app serves (/models, /textures, /thumbnails), so a URL can carry
+// The content version of every unhashed asset the app serves (/models, /textures, /thumbnails, /training), so a URL can carry
 // it as `?v=<hash>` (src/core/assetVersions.ts) and a changed file gets a URL no cache has seen.
 //
 // Why: those URLs are stable names, so a re-exported model keeps its URL and every cache in front of it (the
@@ -17,7 +17,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 /** the public/ directories whose files are served under unhashed names */
-export const VERSIONED_ASSET_DIRS = ['models', 'textures', 'thumbnails']
+export const VERSIONED_ASSET_DIRS = ['models', 'textures', 'thumbnails', 'training']
 
 /** what turns a source asset into the shipped one: a change to any of these re-versions every asset */
 const OPTIMIZER_FILES = ['scripts/optimize-assets.mjs']

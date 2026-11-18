@@ -10,8 +10,16 @@
  * Callers that render these must re-render on a rebind: subscribe with
  * `useSyncExternalStore(subscribeKeymap, keymapRev)`.
  */
+import { defineMessages, t } from '../core/i18n'
 import { activeBinding, formatChord } from '../core/keymap'
 import { middleDragAction } from '../core/navigation'
+
+const M = defineMessages('keyHint', {
+  alternative: ' or ',
+  withKey: '{label} ({key})',
+  middleButton: 'the middle mouse button',
+  shiftMiddleButton: 'Shift and the middle mouse button',
+})
 
 export const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent)
 
@@ -33,7 +41,7 @@ function usableChords(id: string, mac: boolean): string[] {
  */
 export function keyHint(id: string, mac: boolean = IS_MAC): string | null {
   const usable = usableChords(id, mac)
-  return usable.length > 0 ? usable.map((k) => formatChord(k, mac)).join(' or ') : null
+  return usable.length > 0 ? usable.map((k) => formatChord(k, mac)).join(t(M.alternative)) : null
 }
 
 /** Only the first of those chords: what a menu's shortcut column shows, beside every other menu's
@@ -61,7 +69,7 @@ export function acceleratorHint(accelerator: string, mac: boolean = IS_MAC): str
 /** `Label (chord)` when the action has a binding, else just the label */
 export function withKey(label: string, id: string, mac: boolean = IS_MAC): string {
   const key = keyHint(id, mac)
-  return key ? `${label} (${key})` : label
+  return key ? t(M.withKey, { label, key }) : label
 }
 
 /**
@@ -81,5 +89,5 @@ export function withKeys(text: string, mac: boolean = IS_MAC): string {
 
 /** what to hold for a camera move with the middle button: the button alone, or with Shift */
 export function middleGesture(move: 'orbit' | 'pan'): string {
-  return middleDragAction(false) === move ? 'the middle mouse button' : 'Shift and the middle mouse button'
+  return t(middleDragAction(false) === move ? M.middleButton : M.shiftMiddleButton)
 }

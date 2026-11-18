@@ -9,6 +9,7 @@ import { partFolderFiles } from '../../core/parts/partArchive'
 import type { PartPackage } from '../../core/parts/partPackage'
 import { partFingerprint } from '../../core/parts/partOrigin'
 import { RIGHTS_LINE, SUBMISSION_DIR } from '../../core/parts/partSubmission'
+import { PRODUCT_NAME } from '../productBrand'
 
 /** The files a submission adds, at their paths in the parts repository. */
 export function submissionFiles(pkg: PartPackage, opts: { description: string; thumbnailDataUrl?: string }): { path: string; bytes: Uint8Array }[] {
@@ -47,7 +48,7 @@ export function pullRequestText(pkg: PartPackage, opts: { description: string; u
       '',
       `- [x] ${RIGHTS_LINE}`,
       '',
-      'Sent from the Open Industry Project app.',
+      `Sent from ${PRODUCT_NAME}.`,
     ].join('\n'),
   }
 }

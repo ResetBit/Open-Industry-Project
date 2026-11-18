@@ -8,7 +8,7 @@ import { ControllerScope } from './inspector/controllerRow'
 import { PART_DEFS } from '../../core/types'
 import type { ParamSpec, PartInstance, PartType, SdkPart } from '../../core/types'
 import { partParamSpecs, switchValue, visibleWhenHolds } from '../../core/packageParams'
-import { partDisplayName } from '../../core/parts/partDisplayName'
+import { hasBundledMetadata, localizedParamLabel, localizePartDisplayName, translatePartMetadata } from '../parts/partMetadata'
 import { packageThumbFile } from '../../core/parts/partPackage'
 import type { PartPackage } from '../../core/parts/partPackage'
 import { getPackage } from '../../core/parts/partRegistry'
@@ -31,7 +31,7 @@ import { importRigNodePanel, preloadRigNodePanel } from './inspector/rigNodeChun
 import { InspectorHeader } from './inspector/header'
 import { partCreditLine } from '../parts/partCredit'
 import { placedCopiesOf } from '../treeNode'
-import { titleCase } from './inspector/shared'
+import { partDisplayName } from '../../core/parts/partDisplayName'
 import type { Update } from './inspector/shared'
 import { TransformSection } from './inspector/transform'
 import { PartSceneProperties, SceneProperties } from './inspector/scene'
@@ -42,6 +42,7 @@ import { adsEndpoint, eipEndpoint, eipTarget } from '../links/externalPlcStatus'
 import { defineMessages, t } from '../../core/i18n'
 import { tNodes } from '../i18nNodes'
 import { selectionSet } from '../store/selectionSet'
+import { teachModel } from './inspector/teachModel'
 
 const M = defineMessages('inspector', {
   partsSelected: { one: '{count} part selected', other: '{count} parts selected' },
@@ -57,11 +58,13 @@ const M = defineMessages('inspector', {
   visible: 'Visible',
   filter: 'Filter properties',
   expandAll: 'Expand all sections',
+  openTeach: 'Open virtual teach pendant',
   collapseAll: 'Collapse all sections',
 })
 
 // the rig-node editor, out of the first frame (inspector/rigNodeChunk.ts)
 const RigNodePanel = lazy(() => importRigNodePanel().then((m) => ({ default: m.RigNodePanel })))
+const VirtualTeachPendant = lazy(() => import('./inspector/virtualTeachPendant').then((m) => ({ default: m.VirtualTeachPendant })))
 
 interface InspectorProps {
   store: EditorStore
@@ -69,6 +72,7 @@ interface InspectorProps {
   controller: EditorController | null
   /** the catalog's in-browser card renders, by package id (App state), so the header can reuse them */
   packageThumbnails?: ReadonlyMap<string, string>
+  teachRequest?: number
 }
 
 /** a section's fold before anyone touches it: top-level sections open, nested ones ('Legs/Tail End') folded */
@@ -225,7 +229,8 @@ function useTagSources(controller: EditorController | null, state: EditorState):
   )
 }
 
-function InspectorBody({ store, state, controller, packageThumbnails }: InspectorProps) {
+function InspectorBody({ store, state, controller, packageThumbnails, teachRequest }: InspectorProps) {
+  const [teachPanel, setTeachPanel] = useState<{ partId: string | null; request: number }>({ partId: null, request: 0 })
   // fold state persists across selections (remembered per group), keyed by group path
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [filter, setFilter] = useState('')
@@ -382,7 +387,9 @@ function InspectorBody({ store, state, controller, packageThumbnails }: Inspecto
   const def = PART_DEFS[type]
   // the header names what the part is: every SDK part shares the generic 'part' type, so its package says it
   const pkg = type === 'part' ? packageOf(state, (part as SdkPart).packageId) : undefined
-  const kindLabel = pkg?.name ?? def.label
+  const localizeMetadata = hasBundledMetadata(part)
+  const kindName = pkg?.name ?? def.label
+  const kindLabel = localizeMetadata ? translatePartMetadata(kindName) : kindName
   // the Part Editor session's throwaway: its Name field names the part itself (PartInfoFields)
   const definitionCopy = !multi && type === 'part' && state.packageEdit?.partId === part.id
   const thumb = headerThumb(state, part, pkg, packageThumbnails)
@@ -412,16 +419,24 @@ function InspectorBody({ store, state, controller, packageThumbnails }: Inspecto
     s.kind === 'tagRef' || (!!commsSpec?.group && !!s.group && (s.group === commsSpec.group || s.group.startsWith(`${commsSpec.group}/`)))
   // ...and a units switch (ParamSpec.imperialUnits) is the scene's to set: its Units (Scene Properties,
   // core/scene/sceneUnits.ts) write it on every part, so a per-part copy of that choice is never a field.
+  const teachRobot = !multi && !definitionCopy && part.type === 'part' ? teachModel(part, pkg) : null
+  if (teachRobot && teachRequest && teachPanel.request !== teachRequest) {
+    setTeachPanel({ partId: part.id, request: teachRequest })
+  }
+  const teachOpen = teachRobot !== null && teachPanel.partId === part.id
   const editableSpecs = allSpecs.filter(
     (s) =>
       !s.hidden &&
+      !(teachOpen && (s.key === 'waypoints' || s.key === 'jobs')) &&
       !(s.kind === 'boolean' && s.imperialUnits === true) &&
       (!s.visibleWhen || visibleWhenHolds(s.visibleWhen, switchOf(s.visibleWhen.param))) &&
       !(commsOff && s.key !== commsKey && inCommsSection(s)),
   )
   // the filter matches the property name or its enclosing group path
   const visibleSpecs = f
-    ? editableSpecs.filter((s) => titleCase(s.label).toLowerCase().includes(f) || (s.group ?? '').toLowerCase().includes(f))
+    ? editableSpecs.filter((s) => [s.label, localizedParamLabel(s.label, localizeMetadata), s.group ?? '',
+      ...(localizeMetadata ? (s.group ?? '').split('/').map(translatePartMetadata) : []),
+    ].some((text) => text.toLowerCase().includes(f)))
     : editableSpecs
   const { ungrouped, groups } = buildGroupTree(visibleSpecs)
   // a live filter expands every group so matches aren't hidden behind a fold. Otherwise a nested section starts
@@ -444,6 +459,16 @@ function InspectorBody({ store, state, controller, packageThumbnails }: Inspecto
   const previewPose = !multi && part.type === 'part' && controller && !state.running ? (row: readonly number[]) => controller.previewRigPose(part.id, row) : undefined
   // a tag field forces the program variable its tag names, only while the scene runs (inspector/tagForce.tsx)
   const forcing = state.running ? controller : null
+  const teachField = (key: string) => {
+    const spec = allSpecs.find((candidate) => candidate.key === key)
+    return spec ? (
+      <ParamField
+        store={store} spec={spec} parts={targets} allParts={allParts} tagIndex={tagIndex}
+        liveSetpoints={liveSetpoints ?? undefined} disabled={state.running || state.readOnly || !!part.locked}
+        update={update} onContext={openCtx} capturePose={capturePose} previewPose={previewPose} forcing={forcing}
+      />
+    ) : null
+  }
 
   return (
     <div className="inspector">
@@ -460,6 +485,30 @@ function InspectorBody({ store, state, controller, packageThumbnails }: Inspecto
           ) : undefined
         }
       />
+      {teachRobot && part.type === 'part' && (
+        teachOpen ? (
+          <Suspense fallback={null}>
+            <VirtualTeachPendant
+              key={part.id}
+              part={part}
+              model={teachRobot}
+              controller={controller}
+              store={store}
+              parts={allParts}
+              running={state.running}
+              paused={state.paused}
+              readOnly={state.readOnly}
+              waypointEditor={teachField('waypoints')}
+              programEditor={teachField('jobs')}
+              onClose={() => setTeachPanel({ ...teachPanel, partId: null })}
+            />
+          </Suspense>
+        ) : (
+          <button type="button" data-testid="virtual-teach-open" onClick={() => setTeachPanel({ ...teachPanel, partId: part.id })}>
+            {t(M.openTeach)}
+          </button>
+        )
+      )}
       {/* who made it: a part from a part library credits its publisher, wherever it is used (editor/parts/partCredit.ts) */}
       {pkg?.credit &&
         (() => {
@@ -523,7 +572,7 @@ function InspectorBody({ store, state, controller, packageThumbnails }: Inspecto
           label={t(M.name)}
           value={part.name ?? ''}
           // the id is shown separately above; the placeholder previews the auto label used while unnamed
-          placeholder={partDisplayName(part, state.scene.parts)}
+          placeholder={localizePartDisplayName(part, partDisplayName(part, state.scene.parts))}
           tooltip={paramDesc(type, '_name')}
           disabled={false}
           extra={<RevertSlot />}

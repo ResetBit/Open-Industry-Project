@@ -40,6 +40,41 @@ import { checkWiring, wiredBindings } from '../plc/wiring'
 import type { RuntimePartDiagnostic } from '../core/parts/partDiagnostics'
 import { shortestHeldIntervalSec } from '../sim/plcHost'
 
+import { defineMessages, t } from '../core/i18n'
+
+const M = defineMessages('problems.detail', {
+  foreignNote: "The PLC program is in a dialect this version cannot read, so the checks that need its declarations did not run.",
+  program: "Program",
+  controller: "Controller",
+  line: "Line {line}",
+  compileNote: "The PLC program does not compile, so the checks that need its declarations did not run.",
+  scanFault: "{error}: the scan faulted, so the program stopped and every device went to hand control",
+  rateFix: "use {minimum} or longer",
+  rateOrHzFix: "use {minimum} or longer, or a step rate of {hz} Hz or more",
+  taskRate: "task {name} runs every {interval}, faster than the simulator can scan it at {stepHz} Hz steps, so it drops scans and its timers lag sim time: {fix}",
+  task: "Task {name}",
+  undeclared: "{message}. The program does not declare it, which is usually a typo",
+  controllerCompile: "does not compile its program instances: {error}",
+  compileUnknown: "it does not compile",
+  unbound: "the program declares it, but no part reads or writes it",
+  instanceMissing: "runs on {name}, which the project has no controller for, so it does not run",
+  instanceExternal: "runs on {name}, a PLC outside the app, so it does not run here: run {name} in the simulator, or give the instance to another controller",
+  instanceDisabled: "runs on {name}, which is switched off, so it does not run",
+  controllerIdle: "runs in the simulator but runs no program instance: put one on a task of this controller's in the organizer's Tasks",
+  tagDefault: "tags name the default controller, whose tags carry no name: take the name off, or they stay unconnected",
+  tagDisabled: "tags name this controller, but it is switched off in Controller Properties, so Play leaves its tags unconnected",
+  tagCase: "tags name this controller, which the project lists as {name}: spell the tags {name} to reach it",
+  tagMissing: "tags name this controller, but the project has no controller by that name (add it in Controller Properties), so Play leaves its tags unconnected",
+  packageUnknown: "Tags unknown for {packages}: the package is not loaded, so parts using it were not checked.",
+  retiredBind: "@bind was retired, so this comment binds nothing: wire a part to the variable by its name instead",
+  buildError: "does not build: {error}",
+  newSdk: "made with a newer version of the app (Part SDK level {required}; this app has {current}), so it may use something this app lacks. Update the app if it misbehaves",
+  missingPartRef: "\"{label}\" points at {target}, which is not in this scene, so it does nothing: pick another part in the Inspector",
+  runtimeOverflow: "Part runtime problems stopped being recorded after the first 200, so some may be missing here.",
+  externalNote: "An external PLC runs the logic when you press Play, so the program checks above are about the program in this app, which does not run.",
+  heldCode: { one: "1 part type in this shared project is blocked from running its own code, so its runtime problems come from the stand-in that runs instead.", other: "{count} part types in this shared project are blocked from running their own code, so their runtime problems come from the stand-ins that run instead." },
+})
+
 /** Which check produced a row. Also the display grouping, and the sort tie-break after severity. */
 export type ProblemGroup = 'Program' | 'Wiring' | 'Parts' | 'Layout'
 
@@ -208,8 +243,8 @@ export function collectProblems(input: ProblemsInput, known?: ProgramFacts): Pro
   const dialect = input.stDialect
   const foreign = dialect !== undefined && !isKnownDialect(dialect)
   if (foreign) {
-    problems.push({ key: `dialect:${dialect}`, severity: 'error', group: 'Program', subject: 'Program', message: dialectRefusal(dialect), parts: [] })
-    notes.push('The PLC program is in a dialect this version cannot read, so the checks that need its declarations did not run.')
+    problems.push({ key: `dialect:${dialect}`, severity: 'error', group: 'Program', subject: t(M.program), message: dialectRefusal(dialect), parts: [] })
+    notes.push(t(M.foreignNote))
   }
   const src = foreign ? '' : input.stProgram
   const nameOf = (packageId: string): string => input.packageNames?.[packageId] ?? packageId
@@ -222,7 +257,7 @@ export function collectProblems(input: ProblemsInput, known?: ProgramFacts): Pro
   const facts = known ?? programFactsOf(factsArgsOf(input), compiledOnce)
   const found = facts.check
   for (const message of found.controller) {
-    problems.push({ key: `controller:${message}`, severity: 'error', group: 'Program', subject: 'Controller', message, parts: [], panel: 'tasks' })
+    problems.push({ key: `controller:${message}`, severity: 'error', group: 'Program', subject: t(M.controller), message, parts: [], panel: 'tasks' })
   }
   if (src.trim() !== '') {
     for (const d of found.source) {
@@ -234,7 +269,7 @@ export function collectProblems(input: ProblemsInput, known?: ProgramFacts): Pro
         key: `program:${d.pos.offset}:${d.message}`,
         severity: d.severity === 'warning' ? 'warning' : 'error',
         group: 'Program',
-        subject: `Line ${line}`,
+        subject: t(M.line, { line }),
         message: d.message,
         parts: [],
         offset: d.pos.offset,
@@ -254,7 +289,7 @@ export function collectProblems(input: ProblemsInput, known?: ProgramFacts): Pro
   const link = main ? linkOf(main, input.parts) : null
   const brokenProgram = src.trim() !== '' && link === null
   if (brokenProgram) {
-    notes.push('The PLC program does not compile, so the checks that need its declarations did not run.')
+    notes.push(t(M.compileNote))
   }
   // compile() refused a program the checks above passed. The checker is meant to run every check the compiler
   // does, so this is a gap in it (a function block holding itself was one), but the panel must not read
@@ -265,9 +300,9 @@ export function collectProblems(input: ProblemsInput, known?: ProgramFacts): Pro
     // with a table the compiled source is the program with its CONFIGURATION appended, so past the program's own text is the table's
     if (at !== undefined && (!controller || at < src.trimEnd().length)) {
       const line = lineOf(src, at)
-      problems.push({ key: `compile:${at}:${message}`, severity: 'error', group: 'Program', subject: `Line ${line}`, message, parts: [], offset: at, line })
+      problems.push({ key: `compile:${at}:${message}`, severity: 'error', group: 'Program', subject: t(M.line, { line }), message, parts: [], offset: at, line })
     } else {
-      problems.push({ key: `compile:${message}`, severity: 'error', group: 'Program', subject: controller ? 'Controller' : 'Program', message, parts: [], ...(controller ? { panel: 'tasks' as const } : {}) })
+      problems.push({ key: `compile:${message}`, severity: 'error', group: 'Program', subject: t(controller ? M.controller : M.program), message, parts: [], ...(controller ? { panel: 'tasks' as const } : {}) })
     }
   }
 
@@ -276,13 +311,13 @@ export function collectProblems(input: ProblemsInput, known?: ProgramFacts): Pro
   // below. The caller passes it only while the program still reads as it did, so an edit retires it.
   if (input.plcFault && !foreign) {
     const f = input.plcFault
-    const message = `${f.message}: the scan faulted, so the program stopped and every device went to hand control`
+    const message = t(M.scanFault, { error: f.message })
     const at = f.line !== undefined ? offsetAt(src, f.line, f.col ?? 1) : undefined
     if (at !== undefined) {
       const line = lineOf(src, at)
-      problems.push({ key: `plcfault:${at}:${f.message}`, severity: 'error', group: 'Program', subject: `Line ${line}`, message, parts: [], offset: at, line })
+      problems.push({ key: `plcfault:${at}:${f.message}`, severity: 'error', group: 'Program', subject: t(M.line, { line }), message, parts: [], offset: at, line })
     } else {
-      problems.push({ key: `plcfault:${f.message}`, severity: 'error', group: 'Program', subject: 'Program', message, parts: [] })
+      problems.push({ key: `plcfault:${f.message}`, severity: 'error', group: 'Program', subject: t(M.program), message, parts: [] })
     }
   }
 
@@ -293,26 +328,26 @@ export function collectProblems(input: ProblemsInput, known?: ProgramFacts): Pro
     const shortest = shortestHeldIntervalSec(input.stepHz)
     // the value the message offers, rounded up to a whole microsecond so it is one that holds
     const shortestText = timeToString(Math.ceil(shortest * 1e6 - 1e-6) / 1000)
-    for (const t of main.tasks) {
+    for (const task of main.tasks) {
       // the scheduler's own tolerance (plc/scanEngine.ts), so an interval AT the limit is not flagged by a rounding error
-      if (t.kind !== 'periodic' || t.periodSec >= shortest * (1 - 1e-6)) continue
+      if (task.kind !== 'periodic' || task.periodSec >= shortest * (1 - 1e-6)) continue
       // the limit scales with the step: the rate at which this interval would hold, if a project may choose it
-      const hz = Math.ceil((input.stepHz * shortest) / t.periodSec - 1e-9)
-      const fix = hz <= MAX_SIM_HZ ? `use ${shortestText} or longer, or a step rate of ${hz} Hz or more` : `use ${shortestText} or longer`
-      const message = `task ${t.name} runs every ${timeToString(t.periodSec * 1000)}, faster than the simulator can scan it at ${input.stepHz} Hz steps, so it drops scans and its timers lag sim time: ${fix}`
-      const row = { key: `task-rate:${t.name}`, severity: 'warning', group: 'Program', message, parts: [] } as const
+      const hz = Math.ceil((input.stepHz * shortest) / task.periodSec - 1e-9)
+      const fix = hz <= MAX_SIM_HZ ? t(M.rateOrHzFix, { minimum: shortestText, hz }) : t(M.rateFix, { minimum: shortestText })
+      const message = t(M.taskRate, { name: task.name, interval: timeToString(task.periodSec * 1000), stepHz: input.stepHz, fix })
+      const row = { key: `task-rate:${task.name}`, severity: 'warning', group: 'Program', message, parts: [] } as const
       if (controller) {
         // a table's intervals are its tasks, fixed in the organizer (whole ms from 1 up, so only a hand-edited table gets here)
-        problems.push({ ...row, subject: 'Controller', panel: 'tasks' })
+        problems.push({ ...row, subject: t(M.controller), panel: 'tasks' })
         continue
       }
-      const offset = main.intervals[t.name]
+      const offset = main.intervals[task.name]
       if (offset === undefined) {
-        problems.push({ ...row, subject: `Task ${t.name}` })
+        problems.push({ ...row, subject: t(M.task, { name: task.name }) })
         continue
       }
       const line = lineOf(src, offset)
-      problems.push({ ...row, subject: `Line ${line}`, offset, line })
+      problems.push({ ...row, subject: t(M.line, { line }), offset, line })
     }
   }
 
@@ -338,7 +373,7 @@ export function collectProblems(input: ProblemsInput, known?: ProgramFacts): Pro
       severity: p.severity,
       group: 'Wiring',
       subject: p.tag,
-      message: (p.kind === 'undriven' || p.kind === 'unread') && undeclared.has(p.tag) ? `${p.message}. The program does not declare it, which is usually a typo` : p.message,
+      message: (p.kind === 'undriven' || p.kind === 'unread') && undeclared.has(p.tag) ? t(M.undeclared, { message: p.message }) : p.message,
       parts: p.parts,
     })
   }
@@ -348,7 +383,7 @@ export function collectProblems(input: ProblemsInput, known?: ProgramFacts): Pro
     const name = r.controller
     const own = linkOf(r, partsForController(input.parts, name))
     if (!own) {
-      problems.push({ key: `controller-compile:${name}`, severity: 'error', group: 'Program', subject: name, message: `does not compile its program instances: ${r.error?.message ?? 'it does not compile'}`, parts: [], panel: 'tasks' })
+      problems.push({ key: `controller-compile:${name}`, severity: 'error', group: 'Program', subject: name, message: t(M.controllerCompile, { error: r.error?.message ?? t(M.compileUnknown) }), parts: [], panel: 'tasks' })
       continue
     }
     const seen = partsForController(input.parts, name)
@@ -359,7 +394,7 @@ export function collectProblems(input: ProblemsInput, known?: ProgramFacts): Pro
     }
     for (const tag of unhandledProgramTags(seen, own).unbound) {
       const named = controllerTag(name, tag)
-      problems.push({ key: `unbound:${named}`, severity: 'warning', group: 'Wiring', subject: named, message: 'the program declares it, but no part reads or writes it', parts: [] })
+      problems.push({ key: `unbound:${named}`, severity: 'warning', group: 'Wiring', subject: named, message: t(M.unbound), parts: [] })
     }
   }
   // a program instance on a controller that will not run it here
@@ -375,10 +410,10 @@ export function collectProblems(input: ProblemsInput, known?: ProgramFacts): Pro
       group: 'Program',
       subject: q.name,
       message: !named
-        ? `runs on ${plc}, which the project has no controller for, so it does not run`
+        ? t(M.instanceMissing, { name: plc })
         : named.runsOn === 'plc'
-          ? `runs on ${named.name}, a PLC outside the app, so it does not run here: run ${named.name} in the simulator, or give the instance to another controller`
-          : `runs on ${named.name}, which is switched off, so it does not run`,
+          ? t(M.instanceExternal, { name: named.name })
+          : t(M.instanceDisabled, { name: named.name }),
       parts: [],
       panel: 'tasks',
     })
@@ -386,7 +421,7 @@ export function collectProblems(input: ProblemsInput, known?: ProgramFacts): Pro
   // a controller the simulator runs with nothing to run: its tags read and drive nothing
   for (const name of simulated) {
     if (facts.runControllers.includes(name)) continue
-    problems.push({ key: `controller-idle:${name}`, severity: 'warning', group: 'Program', subject: name, message: "runs in the simulator but runs no program instance: put one on a task of this controller's in the organizer's Tasks", parts: [], panel: 'tasks' })
+    problems.push({ key: `controller-idle:${name}`, severity: 'warning', group: 'Program', subject: name, message: t(M.controllerIdle), parts: [], panel: 'tasks' })
   }
   // a controller the tags name that Play will not connect: its tags read and drive nothing
   if (input.namedPlcs) {
@@ -400,7 +435,7 @@ export function collectProblems(input: ProblemsInput, known?: ProgramFacts): Pro
           severity: 'warning',
           group: 'Wiring',
           subject: name,
-          message: 'tags name the default controller, whose tags carry no name: take the name off, or they stay unconnected',
+          message: t(M.tagDefault),
           parts: partsNaming(input.parts, name),
         })
         continue
@@ -413,16 +448,16 @@ export function collectProblems(input: ProblemsInput, known?: ProgramFacts): Pro
         group: 'Wiring',
         subject: name,
         message: set
-          ? 'tags name this controller, but it is switched off in Controller Properties, so Play leaves its tags unconnected'
+          ? t(M.tagDisabled)
           : asSetUp
-            ? `tags name this controller, which the project lists as ${asSetUp.name}: spell the tags ${asSetUp.name} to reach it`
-            : 'tags name this controller, but the project has no controller by that name (add it in Controller Properties), so Play leaves its tags unconnected',
+            ? t(M.tagCase, { name: asSetUp.name })
+            : t(M.tagMissing),
         parts: partsNaming(input.parts, name),
       })
     }
   }
   if (wiring.unresolvedPackages.length > 0) {
-    notes.push(`Tags unknown for ${wiring.unresolvedPackages.join(', ')}: the package is not loaded, so parts using it were not checked.`)
+    notes.push(t(M.packageUnknown, { packages: wiring.unresolvedPackages.join(', ') }))
   }
 
   for (const tag of unbound) {
@@ -431,7 +466,7 @@ export function collectProblems(input: ProblemsInput, known?: ProgramFacts): Pro
       severity: 'warning',
       group: 'Wiring',
       subject: tag,
-      message: 'the program declares it, but no part reads or writes it',
+      message: t(M.unbound),
       parts: [],
     })
   }
@@ -444,8 +479,8 @@ export function collectProblems(input: ProblemsInput, known?: ProgramFacts): Pro
       key: `bind:${offset}`,
       severity: 'warning',
       group: 'Wiring',
-      subject: `Line ${line}`,
-      message: '@bind was retired, so this comment binds nothing: wire a part to the variable by its name instead',
+      subject: t(M.line, { line }),
+      message: t(M.retiredBind),
       parts: [],
       offset,
       line,
@@ -462,7 +497,7 @@ export function collectProblems(input: ProblemsInput, known?: ProgramFacts): Pro
       severity: 'error',
       group: 'Parts',
       subject: nameOf(packageId),
-      message: `does not build: ${message}`,
+      message: t(M.buildError, { error: message }),
       parts: input.parts.filter((p) => p.type === 'part' && p.packageId === packageId).map((p) => p.id),
     })
   }
@@ -482,7 +517,7 @@ export function collectProblems(input: ProblemsInput, known?: ProgramFacts): Pro
       severity: 'warning',
       group: 'Parts',
       subject: nameOf(packageId),
-      message: `made with a newer version of the app (Part SDK level ${level}; this app has ${PART_SDK_LEVEL}), so it may use something this app lacks. Update the app if it misbehaves`,
+      message: t(M.newSdk, { required: level, current: PART_SDK_LEVEL }),
       parts: placed,
     })
   }
@@ -519,7 +554,7 @@ export function collectProblems(input: ProblemsInput, known?: ProgramFacts): Pro
         severity: 'error',
         group: 'Parts',
         subject: labelOf(p.id),
-        message: `"${spec.label}" points at ${target}, which is not in this scene, so it does nothing: pick another part in the Inspector`,
+        message: t(M.missingPartRef, { label: spec.label, target }),
         parts: [p.id],
       })
     }
@@ -533,16 +568,12 @@ export function collectProblems(input: ProblemsInput, known?: ProgramFacts): Pro
   }
 
   // what nothing above could look at
-  if (input.runtimeOverflowed) notes.push('Part runtime problems stopped being recorded after the first 200, so some may be missing here.')
+  if (input.runtimeOverflowed) notes.push(t(M.runtimeOverflow))
   const held = input.heldCode ?? 0
   if (held > 0) {
-    notes.push(
-      held === 1
-        ? '1 part type in this shared project is blocked from running its own code, so its runtime problems come from the stand-in that runs instead.'
-        : `${held} part types in this shared project are blocked from running their own code, so their runtime problems come from the stand-ins that run instead.`,
-    )
+    notes.push(t(M.heldCode, { count: held }))
   }
-  if (input.externalPlc) notes.push('An external PLC runs the logic when you press Play, so the program checks above are about the program in this app, which does not run.')
+  if (input.externalPlc) notes.push(t(M.externalNote))
 
   problems.sort((a, b) => {
     if (a.severity !== b.severity) return a.severity === 'error' ? -1 : 1

@@ -9,7 +9,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 import { createPortal } from 'react-dom'
+import { controllerTag } from '../../../core/io/controllerTag'
 import { variableFits } from '../../../core/io/plcVariables'
+import type { TagValue } from '../../../plc/types'
 import type { PlcVariable, PlcVariableGroup } from '../../../core/io/plcVariables'
 import type { EditorController } from '../../controller'
 import { dialogHost } from '../../dialogHost'
@@ -17,6 +19,7 @@ import { adsEndpoint, eipEndpoint } from '../../links/externalPlcStatus'
 import type { PlcTagList } from '../../links/externalPlcStatus'
 import { canList, readPlcVariables } from '../../links/plcVariables'
 import { connectableControllers, connectionMachines, connectionsOf, programVariableGroups, withConnection } from '../../program/plcConnections'
+import { resolveWatch } from '../../program/plcWatchList'
 import type { ConnectionField, ConnectionMachine, VariableSource } from '../../program/plcConnections'
 import type { EditorState, EditorStore } from '../../store/store'
 import { loadProgramTags } from '../inspector/tagSuggest'
@@ -71,6 +74,12 @@ const M = defineMessages('plcConnections', {
   readOnly: 'This project is open read-only, so connections cannot be changed here.',
   undoConnect: 'Connect {field} to {variable}',
   undoRemove: 'Disconnect {field}',
+  signalTest: 'Live I/O values',
+  signalStopped: 'Start the simulation to verify signal values here.',
+  signalUnavailable: 'No sample',
+  signalOn: 'ON',
+  signalOff: 'OFF',
+  locate: 'Locate {machine} in the scene',
 })
 
 /** How many of a group's variables are shown before the rest wait for a filter: a large PLC lists tens of thousands. */
@@ -169,8 +178,28 @@ export function PlcConnectionsWindow({
     }
   }, [source?.kind, check])
 
-  const machines = useMemo(() => connectionMachines(state.scene.parts, plc?.name ?? null), [state.scene.parts, plc?.name])
+  const scope = plc?.name ?? plcName
+  const machines = useMemo(() => connectionMachines(state.scene.parts, scope), [state.scene.parts, scope])
   const connections = useMemo(() => connectionsOf(machines), [machines])
+  const showLive = state.running || state.liveFollowing
+  const [signals, setSignals] = useState<ReadonlyMap<string, TagValue>>(() => new Map())
+  useEffect(() => {
+    if (!showLive) return
+    const variables = [...new Set(connections.map((connection) => connection.variable))]
+    const sample = (): void => {
+      const next = new Map<string, TagValue>()
+      const watch = controller.plcWatch
+      if (watch) for (const variable of variables) {
+        const name = controllerTag(scope, variable)
+        const value = watch[name] ?? (scope === null ? resolveWatch(name, watch).value : undefined)
+        if (value !== undefined) next.set(variable, value)
+      }
+      setSignals((prior) => prior.size === next.size && [...next].every(([key, value]) => prior.get(key) === value) ? prior : next)
+    }
+    sample()
+    const timer = setInterval(sample, 250)
+    return () => { clearInterval(timer); setSignals(new Map()) }
+  }, [connections, controller, scope, showLive])
   // the picked field as it is now: a pick whose part or field is gone (deleted, undone, a collaborator's edit) is no pick
   const pickedField = useMemo(() => {
     if (!picked) return null
@@ -306,8 +335,14 @@ export function PlcConnectionsWindow({
   }
 
   const body = (): ReactElement => {
-    if (!plc || !source) return <div className="ctl-banner" data-testid="plc-conn-no-controller">{t(M.noController, { name: shownName })}</div>
-    if (!listable) return <div className="ctl-banner">{t(hostFor(controller, source) ? M.oldShell : M.needsDesktop)}</div>
+    if (!plc || !source) return <>
+      <div className="ctl-banner" data-testid="plc-conn-no-controller">{t(M.noController, { name: shownName })}</div>
+      {connectionList(false)}
+    </>
+    if (!listable) return <>
+      <div className="ctl-banner">{t(hostFor(controller, source) ? M.oldShell : M.needsDesktop)}</div>
+      {connectionList(false)}
+    </>
     return (
       <>
         {locked && <div className="ctl-banner">{t(M.readOnly)}</div>}
@@ -327,20 +362,34 @@ export function PlcConnectionsWindow({
         <div className={note?.problem ? 'ctl-problem plc-conn-note' : 'ctl-dim plc-conn-note'} role="status" data-testid="plc-conn-note">
           {(picked && !pickedField ? null : note?.text) ?? t(M.pickField)}
         </div>
+        {connectionList(true)}
+      </>
+    )
+  }
+
+  const connectionList = (editable: boolean): ReactElement => (
         <section className="plc-conn-pane plc-conn-list" aria-label={t(M.connections)} data-testid="plc-conn-list">
           <div className="plc-conn-head">
             {t(M.connections)} <span className="ctl-dim">{t(M.legend)}</span>
           </div>
+          <div className="ctl-dim">{t(showLive ? M.signalTest : M.signalStopped)}</div>
           {connections.length === 0 && <div className="ctl-dim">{t(M.noConnections)}</div>}
-          {connections.map((c) => (
-            <div key={`${c.partId}:${c.key}`} className="plc-conn-line" data-testid="plc-conn-line">
+          {connections.map((c) => {
+            const value = showLive ? signals.get(c.variable) : undefined
+            return <div key={`${c.partId}:${c.key}`} className="plc-conn-line" data-testid="plc-conn-line">
               {/* i18n-ok: names from the scene and the PLC */}
-              <span>{`${c.machine}: ${c.field}`}</span>
+              <button type="button" className="plc-watch-part plc-conn-locate" title={t(M.locate, { machine: c.machine })} onClick={() => {
+                store.select(c.partId)
+                controller.view.focusOn([c.partId])
+              }}>{`${c.machine}: ${c.field}`}</button>
               <span className="plc-conn-arrow" title={c.dir === 'fromPlc' ? t(M.fromPlc) : c.dir === 'toPlc' ? t(M.toPlc) : undefined}>
                 {arrow(c.dir)}
               </span>
-              <span className="plc-conn-var">{c.variable}</span>
-              <button
+              <span className="plc-conn-var">{c.variable}{showLive && <span
+                className={`plc-conn-signal ${value === true ? 'is-on' : value === undefined ? 'is-unavailable' : ''}`}
+                data-testid="plc-conn-signal"
+              >{value === undefined ? t(M.signalUnavailable) : typeof value === 'boolean' ? t(value ? M.signalOn : M.signalOff) : String(value)}</span>}</span>
+              {editable && <button
                 className="plc-conn-remove"
                 title={t(M.remove)}
                 aria-label={t(M.remove)}
@@ -349,13 +398,11 @@ export function PlcConnectionsWindow({
                 data-testid="plc-conn-remove"
               >
                 <CloseIcon />
-              </button>
+              </button>}
             </div>
-          ))}
+          })}
         </section>
-      </>
-    )
-  }
+  )
 
   return createPortal(
     <div className="author-backdrop" onPointerDown={onClose} onClick={(e) => e.stopPropagation()}>

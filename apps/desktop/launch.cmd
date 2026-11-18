@@ -1,5 +1,5 @@
 @echo off
-REM Open Industry Project - Simulator launcher (Electron desktop shell).
+REM VirtualSimulation - Simulator launcher (Electron desktop shell).
 REM Invoked by launch.vbs with a hidden console, so nothing flashes on screen.
 setlocal
 set "HERE=%~dp0"
@@ -19,7 +19,7 @@ for /l %%i in (1,1,90) do (
   timeout /t 1 /nobreak >nul
 )
 REM No console is visible, so surface the failure as a dialog instead of a dead `pause`.
-mshta "javascript:alert('Open Industry Project: the dev server did not start in time. Open a terminal in the repo root and run: npm run dev');close()"
+mshta "javascript:alert('VirtualSimulation: the dev server did not start in time. Open a terminal in the repo root and run: npm run dev');close()"
 exit /b 1
 
 :ready
